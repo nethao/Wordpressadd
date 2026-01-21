@@ -12,7 +12,7 @@ import time
 from datetime import datetime
 
 # 测试配置
-BASE_URL = "http://localhost:8001"
+BASE_URL = "http://localhost:8002"
 TEST_CREDENTIALS = {
     "admin": {"username": "admin", "password": "admin123456"},
     "outsource": {"username": "outsource", "password": "outsource123456"}

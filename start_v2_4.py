@@ -99,8 +99,9 @@ def main():
     
     # 启动应用
     try:
+        port = os.getenv("PORT", "8002")  # 在try块开始就定义port变量
         print("🌐 启动Web服务器...")
-        print("📍 访问地址: http://localhost:8001")
+        print(f"📍 访问地址: http://localhost:{port}")
         print("🔑 管理员登录: admin / admin123456")
         print("👥 外包人员登录: outsource / outsource123456")
         print("=" * 50)
@@ -112,7 +113,7 @@ def main():
             sys.executable, "-m", "uvicorn",
             "main_v2_4:app",
             "--host", "0.0.0.0",
-            "--port", "8001",
+            "--port", port,
             "--reload"
         ])
         

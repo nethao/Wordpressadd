@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理后台 V2.1 - WordPress 软文发布中间件</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚙️</text></svg>">
+    <style>
+        .admin-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 8px;
+        }
+        
+        .stat-label {
+            color: #718096;
+            font-size: 1.1rem;
+        }
+        
+        .chart-container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        
+        .config-form {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        
+        .config-section {
+            background: rgba(247, 250, 252, 0.5);
+            border-radius: 10px;
+            padding: 20px;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .config-section h4 {
+            color: #4a5568;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+        }
+        
+        .config-item {
+            margin-bottom: 15px;
+        }
+        
+        .config-item label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #4a5568;
+            font-size: 0.9rem;
+        }
+        
+        .config-item input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+        
+        .config-item input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+        }
+        
+        .config-status {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        
+        .config-status.configured {
+            background: rgba(72, 187, 120, 0.1);
+            color: #38a169;
+        }
+        
+        .config-status.not-configured {
+            background: rgba(245, 101, 101, 0.1);
+            color: #e53e3e;
+        }
+        
+        .log-entry {
+            padding: 10px;
+            border-left: 4px solid #e2e8f0;
+            margin-bottom: 8px;
+            background: rgba(247, 250, 252, 0.5);
+            border-radius: 0 8px 8px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+        
+        .log-entry.error {
+            border-left-color: #e53e3e;
+            background: rgba(245, 101, 101, 0.1);
+        }
+        
+        .log-entry.success {
+            border-left-color: #38a169;
+            background: rgba(72, 187, 120, 0.1);
+        }
+        
+        .log-entry.info {
+            border-left-color: #3182ce;
+            background: rgba(49, 130, 206, 0.1);
+        }
+        
+        .refresh-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
+            transition: all 0.3s ease;
+        }
+        
+        .refresh-btn:hover {
+            transform: scale(1.1);
+        }
+        
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+        
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+        
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .toggle-slider {
+            background-color: #667eea;
+        }
+        
+        input:checked + .toggle-slider:before {
+            transform: translateX(26px);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 头部 -->
+        <header class="header">
+            <h1>⚙️ 管理后台 V2.1</h1>
+            <p>WordPress 软文发布中间件系统监控与配置管理</p>
+            <div style="margin-top: 15px;">
+                <a href="/" class="btn btn-secondary">返回发布页面</a>
+                <a href="/docs" class="btn btn-secondary">API文档</a>
+                <button onclick="exportSystemReport()" class="btn btn-secondary">导出系统报告</button>
+            </div>
+        </header>
+
+        <!-- 统计卡片 -->
+        <div class="admin-grid">
+            <div class="stat-card">
+                <div class="stat-number" id="totalPublished">0</div>
+                <div class="stat-label">总发布数</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-number" id="successRate">0%</div>
+                <div class="stat-label">成功率</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-number" id="todayPublished">0</div>
+                <div class="stat-label">今日发布</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-number" id="auditRejected">0</div>
+                <div class="stat-label">审核拒绝</div>
+            </div>
+        </div>
+
+        <!-- 配置管理 -->
+        <div class="chart-container">
+            <h3 class="panel-title">
+                🔧 系统配置管理
+                <button onclick="loadCurrentConfig()" class="btn btn-secondary" style="margin-left: auto; padding: 4px 8px; font-size: 0.8rem;">
+                    刷新配置
+                </button>
+            </h3>
+            
+            <form id="configForm" class="config-form">
+                <!-- WordPress配置 -->
+                <div class="config-section">
+                    <h4>📝 WordPress配置 <span id="wpStatus" class="config-status not-configured">未配置</span></h4>
+                    
+                    <div class="config-item">
+                        <label for="wpDomain">WordPress域名</label>
+                        <input type="text" id="wpDomain" placeholder="example.com" />
+                    </div>
+                    
+                    <div class="config-item">
+                        <label for="wpUsername">WordPress用户名</label>
+                        <input type="text" id="wpUsername" placeholder="admin" />
+                    </div>
+                    
+                    <div class="config-item">
+                        <label for="wpAppPassword">WordPress应用密码</label>
+                        <input type="password" id="wpAppPassword" placeholder="xxxx xxxx xxxx xxxx" />
+                    </div>
+                </div>
+                
+                <!-- 百度AI配置 -->
+                <div class="config-section">
+                    <h4>🤖 百度AI配置 <span id="baiduStatus" class="config-status not-configured">未配置</span></h4>
+                    
+                    <div class="config-item">
+                        <label for="baiduApiKey">API Key</label>
+                        <input type="password" id="baiduApiKey" placeholder="百度AI API Key" />
+                    </div>
+                    
+                    <div class="config-item">
+                        <label for="baiduSecretKey">Secret Key</label>
+                        <input type="password" id="baiduSecretKey" placeholder="百度AI Secret Key" />
+                    </div>
+                </div>
+                
+                <!-- 安全配置 -->
+                <div class="config-section">
+                    <h4>🔒 安全配置 <span id="securityStatus" class="config-status not-configured">未配置</span></h4>
+                    
+                    <div class="config-item">
+                        <label for="clientAuthToken">外包身份令牌</label>
+                        <input type="password" id="clientAuthToken" placeholder="外包身份验证令牌" />
+                    </div>
+                    
+                    <div class="config-item">
+                        <label for="testMode">测试模式</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="testMode">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <small style="color: #718096; display: block; margin-top: 5px;">
+                            开启后将使用模拟数据，无需真实API配置
+                        </small>
+                    </div>
+                </div>
+            </form>
+            
+            <div style="margin-top: 20px; text-align: center;">
+                <button onclick="saveConfiguration()" class="btn btn-primary">
+                    💾 保存配置
+                </button>
+                <button onclick="testConfiguration()" class="btn btn-secondary">
+                    🧪 测试配置
+                </button>
+            </div>
+        </div>
+
+        <!-- 图表区域 -->
+        <div class="chart-container">
+            <h3 class="panel-title">📊 发布趋势</h3>
+            <canvas id="publishChart" width="400" height="200"></canvas>
+        </div>
+
+        <!-- 系统日志 -->
+        <div class="chart-container">
+            <h3 class="panel-title">
+                📋 系统日志
+                <button onclick="refreshLogs()" class="btn btn-secondary" style="margin-left: auto; padding: 4px 8px; font-size: 0.8rem;">
+                    刷新
+                </button>
+            </h3>
+            <div id="systemLogs" style="max-height: 400px; overflow-y: auto;">
+                <p style="color: #718096; text-align: center;">加载中...</p>
+            </div>
+        </div>
+
+        <!-- 系统信息 -->
+        <div class="chart-container">
+            <h3 class="panel-title">ℹ️ 系统信息</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
+                <div>
+                    <h4 style="color: #4a5568; margin-bottom: 8px;">服务信息</h4>
+                    <div style="color: #718096; line-height: 1.6;">
+                        <div>版本: <span id="serviceVersion">V2.1.0</span></div>
+                        <div>端口: <span id="serverPort">8001</span></div>
+                        <div>启动时间: <span id="startTime">-</span></div>
+                        <div>运行状态: <span id="runningStatus">检查中...</span></div>
+                    </div>
+                </div>
+                
+                <div>
+                    <h4 style="color: #4a5568; margin-bottom: 8px;">API端点</h4>
+                    <div style="color: #718096; line-height: 1.6;">
+                        <div>发布接口: <code>/publish</code></div>
+                        <div>配置接口: <code>/config</code></div>
+                        <div>健康检查: <code>/health</code></div>
+                        <div>WordPress: <code>/adv_posts</code></div>
+                    </div>
+                </div>
+                
+                <div>
+                    <h4 style="color: #4a5568; margin-bottom: 8px;">功能特性</h4>
+                    <div style="color: #718096; line-height: 1.6;">
+                        <div>✅ 富文本编辑器</div>
+                        <div>✅ 百度AI审核</div>
+                        <div>✅ 自动文章分类</div>
+                        <div>✅ 配置管理界面</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 刷新按钮 -->
+    <button class="refresh-btn" onclick="refreshAll()" title="刷新所有数据">
+        🔄
+    </button>
+
+    <script src="/static/js/admin_v2.js"></script>
+</body>
+</html>

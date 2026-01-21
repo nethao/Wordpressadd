@@ -1,0 +1,24 @@
+# WordPress软文发布中间件 V2.1 依赖包
+
+# Web框架
+fastapi>=0.100.0
+uvicorn[standard]>=0.20.0
+
+# 模板和静态文件支持
+jinja2>=3.0.0
+python-multipart>=0.0.5
+
+# HTTP客户端
+aiohttp>=3.8.0
+
+# 数据验证
+pydantic>=2.0.0
+
+# 环境变量管理
+python-dotenv>=1.0.0
+
+# SSL警告禁用
+urllib3>=1.26.0
+
+# 可选：日志和监控
+# loguru>=0.7.0

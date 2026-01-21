@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WordPress 软文发布中间件 V2.1</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <!-- 引入Quill富文本编辑器 -->
+    <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+    <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📝</text></svg>">
+    <style>
+        /* 富文本编辑器样式 */
+        .editor-container {
+            background: white;
+            border-radius: 8px;
+            border: 2px solid #e2e8f0;
+            transition: all 0.3s ease;
+        }
+        
+        .editor-container:focus-within {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .ql-toolbar {
+            border-top-left-radius: 8px;
+            border-top-right-radius: 8px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .ql-container {
+            border-bottom-left-radius: 8px;
+            border-bottom-right-radius: 8px;
+            min-height: 200px;
+            font-size: 16px;
+        }
+        
+        .ql-editor {
+            min-height: 200px;
+            padding: 16px;
+        }
+        
+        .ql-editor.ql-blank::before {
+            color: #a0aec0;
+            font-style: normal;
+        }
+        
+        /* 字符计数样式 */
+        .char-count {
+            text-align: right;
+            font-size: 0.9rem;
+            color: #718096;
+            margin-top: 8px;
+            padding: 0 4px;
+        }
+        
+        .char-count.warning {
+            color: #ed8936;
+        }
+        
+        .char-count.error {
+            color: #e53e3e;
+        }
+        
+        /* 预览模式样式 */
+        .preview-container {
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 15px;
+            display: none;
+        }
+        
+        .preview-container.show {
+            display: block;
+        }
+        
+        .preview-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #2d3748;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        
+        .preview-content {
+            line-height: 1.6;
+            color: #4a5568;
+        }
+        
+        /* 工具栏按钮 */
+        .toolbar-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .toolbar-btn {
+            padding: 8px 16px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background: white;
+            color: #4a5568;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+        }
+        
+        .toolbar-btn:hover {
+            background: #f7fafc;
+            border-color: #cbd5e0;
+        }
+        
+        .toolbar-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 头部 -->
+        <header class="header">
+            <h1>📝 WordPress 软文发布中间件 V2.1</h1>
+            <p>适配WordPress插件V2.1版本，集成百度AI审核的智能发布平台</p>
+            <div style="margin-top: 15px;">
+                <a href="/admin" class="btn btn-secondary">管理后台</a>
+                <a href="/docs" class="btn btn-secondary">API文档</a>
+            </div>
+        </header>
+
+        <!-- 主要内容区域 -->
+        <div class="main-content">
+            <!-- 发布表单 -->
+            <div class="publish-form">
+                <h2 class="panel-title">
+                    ✍️ 发布新文章
+                </h2>
+                
+                <form id="publishForm">
+                    <div class="form-group">
+                        <label for="title">
+                            文章标题 
+                            <span class="tooltip">
+                                ℹ️
+                                <span class="tooltiptext">请输入吸引人的文章标题，不超过200个字符</span>
+                            </span>
+                        </label>
+                        <input 
+                            type="text" 
+                            id="title" 
+                            name="title" 
+                            placeholder="请输入文章标题..." 
+                            maxlength="200"
+                            required
+                        >
+                        <div class="char-count">
+                            <span id="titleCount">0/200</span>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="content">
+                            文章内容
+                            <span class="tooltip">
+                                ℹ️
+                                <span class="tooltiptext">支持富文本编辑，内容将通过百度AI进行审核</span>
+                            </span>
+                        </label>
+                        
+                        <!-- 工具栏按钮 -->
+                        <div class="toolbar-buttons">
+                            <button type="button" class="toolbar-btn active" onclick="switchMode('edit')">
+                                📝 编辑模式
+                            </button>
+                            <button type="button" class="toolbar-btn" onclick="switchMode('preview')">
+                                👁️ 预览模式
+                            </button>
+                            <button type="button" class="toolbar-btn" onclick="clearContent()">
+                                🗑️ 清空内容
+                            </button>
+                            <button type="button" class="toolbar-btn" onclick="insertTemplate()">
+                                📄 插入模板
+                            </button>
+                        </div>
+                        
+                        <!-- 富文本编辑器 -->
+                        <div class="editor-container">
+                            <div id="editor"></div>
+                        </div>
+                        
+                        <!-- 预览容器 -->
+                        <div id="previewContainer" class="preview-container">
+                            <div id="previewTitle" class="preview-title">文章标题预览</div>
+                            <div id="previewContent" class="preview-content">文章内容预览...</div>
+                        </div>
+                        
+                        <div class="char-count">
+                            <span id="contentCount">0/50000</span>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        <button type="submit" id="submitBtn" class="btn btn-primary">
+                            发布文章
+                        </button>
+                        <button type="button" onclick="resetForm();" class="btn btn-secondary">
+                            重置表单
+                        </button>
+                        <button type="button" onclick="saveDraft();" class="btn btn-secondary">
+                            保存草稿
+                        </button>
+                        <div style="font-size: 0.9rem; color: #718096; margin-left: auto;">
+                            💡 快捷键：Ctrl+Enter 发布，Ctrl+S 保存草稿
+                        </div>
+                    </div>
+                </form>
+
+                <!-- 响应消息区域 -->
+                <div id="message"></div>
+            </div>
+
+            <!-- 侧边栏 -->
+            <div class="sidebar">
+                <!-- 服务状态面板 -->
+                <div class="status-panel">
+                    <h3 class="panel-title">
+                        🔧 服务状态 V2.1
+                    </h3>
+                    
+                    <div id="serviceStatus" class="status-indicator status-offline">
+                        <div class="status-dot"></div>
+                        <span>检查中...</span>
+                    </div>
+                    
+                    <div style="margin-top: 15px; font-size: 0.9rem; color: #718096;">
+                        <div>🤖 百度AI审核：自动检测</div>
+                        <div>📝 WordPress发布：/adv_posts</div>
+                        <div>🔒 身份验证：令牌认证</div>
+                        <div>📂 自动分类：插件处理</div>
+                    </div>
+                </div>
+
+                <!-- 发布历史面板 -->
+                <div class="history-panel">
+                    <h3 class="panel-title">
+                        📊 发布历史
+                        <div style="margin-left: auto; display: flex; gap: 8px;">
+                            <button onclick="exportHistory()" class="btn btn-secondary" style="padding: 4px 8px; font-size: 0.8rem;">
+                                导出
+                            </button>
+                            <button onclick="clearHistory()" class="btn btn-secondary" style="padding: 4px 8px; font-size: 0.8rem;">
+                                清空
+                            </button>
+                        </div>
+                    </h3>
+                    
+                    <div id="historyList">
+                        <p style="color: #718096; text-align: center;">加载中...</p>
+                    </div>
+                </div>
+
+                <!-- 编辑器帮助 -->
+                <div class="status-panel">
+                    <h3 class="panel-title">
+                        📚 编辑器功能
+                    </h3>
+                    
+                    <div style="font-size: 0.9rem; color: #718096; line-height: 1.6;">
+                        <div>🎨 <strong>富文本编辑</strong>：支持格式化文本</div>
+                        <div>🔗 <strong>链接插入</strong>：支持超链接</div>
+                        <div>📷 <strong>图片支持</strong>：可插入图片</div>
+                        <div>📝 <strong>列表功能</strong>：有序/无序列表</div>
+                        <div>👁️ <strong>实时预览</strong>：所见即所得</div>
+                        <div>💾 <strong>自动保存</strong>：防止内容丢失</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 功能说明 -->
+        <div class="publish-form" style="margin-top: 20px;">
+            <h3 class="panel-title">
+                📋 V2.1版本更新说明
+            </h3>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 15px;">
+                <div>
+                    <h4 style="color: #4a5568; margin-bottom: 8px;">🆕 V2.1新特性</h4>
+                    <ul style="color: #718096; line-height: 1.6;">
+                        <li>适配WordPress插件V2.1版本</li>
+                        <li>新增富文本编辑器支持</li>
+                        <li>自动文章分类（插件处理）</li>
+                        <li>增强的容错机制</li>
+                        <li>本地测试环境优化</li>
+                        <li>配置管理界面</li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h4 style="color: #4a5568; margin-bottom: 8px;">🔍 内容审核流程</h4>
+                    <ul style="color: #718096; line-height: 1.6;">
+                        <li>外包身份令牌验证</li>
+                        <li>百度AI智能内容审核</li>
+                        <li>政治敏感词自动拦截</li>
+                        <li>详细违规信息反馈</li>
+                        <li>审核通过后自动发布</li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h4 style="color: #4a5568; margin-bottom: 8px;">📝 发布规则</h4>
+                    <ul style="color: #718096; line-height: 1.6;">
+                        <li>强制设为"待审核"状态</li>
+                        <li>插件自动处理文章分类</li>
+                        <li>支持HTML富文本内容</li>
+                        <li>自动保存草稿功能</li>
+                        <li>实时字符计数提示</li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h4 style="color: #4a5568; margin-bottom: 8px;">🛡️ 安全特性</h4>
+                    <ul style="color: #718096; line-height: 1.6;">
+                        <li>外包身份令牌验证</li>
+                        <li>内容长度限制保护</li>
+                        <li>完整的错误处理机制</li>
+                        <li>本地历史记录追踪</li>
+                        <li>SSL证书验证优化</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <footer style="text-align: center; margin-top: 40px; padding: 20px; color: rgba(255,255,255,0.7);">
+            <p>WordPress 软文发布中间件 V2.1 | 适配WordPress插件V2.1版本</p>
+            <p style="font-size: 0.9rem; margin-top: 8px;">
+                🔗 <a href="/docs" style="color: rgba(255,255,255,0.8);">API文档</a> | 
+                🔍 <a href="/health" style="color: rgba(255,255,255,0.8);">服务状态</a> |
+                ⚙️ <a href="/admin" style="color: rgba(255,255,255,0.8);">管理后台</a>
+            </p>
+        </footer>
+    </div>
+
+    <script src="/static/js/app_v2.js"></script>
+</body>
+</html>

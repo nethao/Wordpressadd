@@ -1,0 +1,105 @@
+{
+  "test_time": "2026-01-21T20:15:16.946473",
+  "summary": {
+    "total": 6,
+    "passed": 3,
+    "failed": 3,
+    "success_rate": 50.0
+  },
+  "results": [
+    {
+      "test": "健康检查",
+      "success": false,
+      "message": "版本不匹配: 2.3.0",
+      "details": null,
+      "timestamp": "2026-01-21T20:15:15.347597"
+    },
+    {
+      "test": "安全头检查",
+      "success": true,
+      "message": "安全配置检查完成",
+      "details": {
+        "响应状态": "状态码: 200",
+        "Content-Type": "text/html; charset=utf-8"
+      },
+      "timestamp": "2026-01-21T20:15:15.357617"
+    },
+    {
+      "test": "登录安全-错误凭据",
+      "success": true,
+      "message": "正确拒绝了错误凭据",
+      "details": null,
+      "timestamp": "2026-01-21T20:15:15.361711"
+    },
+    {
+      "test": "登录安全-正确凭据",
+      "success": true,
+      "message": "登录成功并设置了会话Cookie",
+      "details": null,
+      "timestamp": "2026-01-21T20:15:15.365108"
+    },
+    {
+      "test": "登录安全-错误凭据",
+      "success": true,
+      "message": "正确拒绝了错误凭据",
+      "details": null,
+      "timestamp": "2026-01-21T20:15:15.367811"
+    },
+    {
+      "test": "登录安全-正确凭据",
+      "success": true,
+      "message": "登录成功并设置了会话Cookie",
+      "details": null,
+      "timestamp": "2026-01-21T20:15:15.371664"
+    },
+    {
+      "test": "API-用户信息",
+      "success": true,
+      "message": "/api/user 正常",
+      "details": null,
+      "timestamp": "2026-01-21T20:15:15.374679"
+    },
+    {
+      "test": "API-本月统计",
+      "success": true,
+      "message": "/api/stats/monthly 正常",
+      "details": null,
+      "timestamp": "2026-01-21T20:15:16.094722"
+    },
+    {
+      "test": "API-发布历史",
+      "success": false,
+      "message": "HTTP状态码: 404",
+      "details": null,
+      "timestamp": "2026-01-21T20:15:16.097042"
+    },
+    {
+      "test": "API-API信息",
+      "success": true,
+      "message": "/api/info 正常",
+      "details": null,
+      "timestamp": "2026-01-21T20:15:16.099715"
+    },
+    {
+      "test": "V2.4-发布历史API",
+      "success": false,
+      "message": "HTTP状态码: 404",
+      "details": null,
+      "timestamp": "2026-01-21T20:15:16.101847"
+    },
+    {
+      "test": "AI审核开关",
+      "success": true,
+      "message": "AI审核已启用，文章通过审核",
+      "details": null,
+      "timestamp": "2026-01-21T20:15:16.942693"
+    },
+    {
+      "test": "文章发布",
+      "success": true,
+      "message": "测试文章发布成功，ID: 25",
+      "details": null,
+      "timestamp": "2026-01-21T20:15:16.943001"
+    }
+  ]
+}

@@ -1,5 +1,5 @@
-// 文章发布系统 V2.3 - 系统管理页面脚本
-// 包含配置管理、系统监控功能和多角色登录系统
+// 文章发布系统 V2.4 - 系统管理页面脚本
+// 功能优化版本，增加代码模式、发布历史面板及审核开关优化
 
 // 全局变量
 let publishHistory = JSON.parse(localStorage.getItem('publishHistory') || '[]');
@@ -241,6 +241,9 @@ function updateConfigForm(config) {
     // 安全配置
     document.getElementById('clientAuthToken').placeholder = config.client_auth_token ? '已配置 (点击修改)' : '未配置';
     document.getElementById('testMode').checked = config.test_mode || false;
+    
+    // V2.4新增：AI审核开关
+    document.getElementById('enableAiCheck').checked = config.enable_ai_check !== false; // 默认启用
 }
 
 // 更新配置状态显示
@@ -273,7 +276,8 @@ async function saveConfiguration() {
         baidu_api_key: document.getElementById('baiduApiKey').value.trim(),
         baidu_secret_key: document.getElementById('baiduSecretKey').value.trim(),
         client_auth_token: document.getElementById('clientAuthToken').value.trim(),
-        test_mode: document.getElementById('testMode').checked
+        test_mode: document.getElementById('testMode').checked,
+        enable_ai_check: document.getElementById('enableAiCheck').checked // V2.4新增
     };
     
     // 过滤空值（保留现有配置）
@@ -377,7 +381,7 @@ function showConfigMessage(message, type) {
 // 更新系统信息
 function updateSystemInfo(healthData) {
     if (healthData) {
-        document.getElementById('serviceVersion').textContent = healthData.version || 'V2.3.0';
+        document.getElementById('serviceVersion').textContent = healthData.version || 'V2.4.0';
         document.getElementById('runningStatus').textContent = '✅ 运行正常';
         
         if (healthData.timestamp) {
@@ -392,6 +396,15 @@ function updateSystemInfo(healthData) {
                 sessionInfo.textContent = `活跃会话: ${healthData.active_sessions}`;
             }
         }
+        
+        // V2.4新增：显示AI审核状态
+        if (healthData.ai_check_enabled !== undefined) {
+            const aiCheckStatus = document.getElementById('aiCheckStatus');
+            if (aiCheckStatus) {
+                aiCheckStatus.textContent = healthData.ai_check_enabled ? '✅ 已启用' : '❌ 已禁用';
+                aiCheckStatus.style.color = healthData.ai_check_enabled ? '#38a169' : '#e53e3e';
+            }
+        }
     }
 }
 
@@ -401,11 +414,14 @@ function loadSystemLogs() {
     
     // 模拟系统日志（实际项目中应该从服务器获取）
     const logs = [
-        { time: new Date(), level: 'INFO', message: '文章发布系统 V2.3 启动成功' },
+        { time: new Date(), level: 'INFO', message: '文章发布系统 V2.4 启动成功' },
+        { time: new Date(Date.now() - 60000), level: 'SUCCESS', message: 'AI审核开关功能已加载' },
+        { time: new Date(Date.now() - 120000), level: 'SUCCESS', message: '代码模式编辑器初始化完成' },
         { time: new Date(Date.now() - 180000), level: 'SUCCESS', message: `用户 ${currentUser?.username || '未知'} 登录成功` },
+        { time: new Date(Date.now() - 240000), level: 'SUCCESS', message: '发布历史面板加载完成' },
         { time: new Date(Date.now() - 300000), level: 'SUCCESS', message: '文章发布成功 - 使用/adv_posts端点' },
         { time: new Date(Date.now() - 600000), level: 'INFO', message: '本月发布统计API调用成功' },
-        { time: new Date(Date.now() - 900000), level: 'SUCCESS', message: 'Web UI深度重构完成' },
+        { time: new Date(Date.now() - 900000), level: 'SUCCESS', message: 'V2.4功能优化完成' },
         { time: new Date(Date.now() - 1200000), level: 'INFO', message: '富文本编辑器初始化完成' },
         { time: new Date(Date.now() - 1500000), level: 'SUCCESS', message: '配置管理模块加载成功' },
         { time: new Date(Date.now() - 1800000), level: 'INFO', message: 'Session管理器启动成功' }
@@ -573,6 +589,9 @@ function exportSystemReport() {
         },
         history: publishHistory.slice(0, 100), // 最近100条记录
         features: [
+            'V2.4功能优化：代码模式、发布历史面板及审核开关优化', // V2.4新增
+            'HTML代码编辑器支持', // V2.4新增
+            'AI审核开关控制', // V2.4新增
             'Web UI深度重构与极简布局',
             '本月发布统计功能',
             '多角色登录系统（管理员 vs 外包人员）',

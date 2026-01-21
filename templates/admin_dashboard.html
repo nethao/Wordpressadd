@@ -340,6 +340,17 @@
                             <label for="testMode">测试模式</label>
                         </div>
                     </div>
+                    
+                    <!-- V2.4新增：AI审核开关 -->
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="enableAiCheck" checked>
+                            <label for="enableAiCheck">启用AI内容审核</label>
+                        </div>
+                        <small style="color: #718096; margin-top: 5px; display: block;">
+                            关闭后将跳过百度AI审核，直接发布到WordPress
+                        </small>
+                    </div>
                 </div>
 
                 <!-- 系统信息 -->
@@ -347,10 +358,11 @@
                     <h4 style="color: #4a5568; margin-bottom: 15px;">系统信息</h4>
                     
                     <div style="font-size: 0.9rem; color: #718096; line-height: 1.6;">
-                        <div>版本：<span id="serviceVersion">V2.3.0</span></div>
+                        <div>版本：<span id="serviceVersion">V2.4.0</span></div>
                         <div>状态：<span id="runningStatus">检查中...</span></div>
                         <div>启动时间：<span id="startTime">-</span></div>
                         <div id="sessionInfo">活跃会话：0</div>
+                        <div>AI审核：<span id="aiCheckStatus">检查中...</span></div>
                     </div>
                 </div>
             </form>
@@ -394,7 +406,7 @@
 
         <!-- 页脚 -->
         <footer style="text-align: center; margin-top: 40px; padding: 20px; color: rgba(255,255,255,0.7);">
-            <p>文章发布系统 V2.3 | 系统管理界面</p>
+            <p>文章发布系统 V2.4 | 系统管理界面 - 功能优化版本</p>
         </footer>
     </div>
 

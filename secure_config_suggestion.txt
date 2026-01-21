@@ -1,0 +1,17 @@
+# 安全配置建议 - 请复制到.env文件
+
+# 强密码配置
+ADMIN_PASS=FNXAcrZWh5cUBIpjmOh-SQ
+OUTSOURCE_PASS=Qtcx2kZrMoiUTlBNMOfb0w
+SESSION_SECRET_KEY=OV2Xjyvge1cP6kFhMjJpvdLtHgGwUBo54IszStWEOvg
+CLIENT_AUTH_TOKEN=XM7DOMLtj0kOMSh5_GfmQ5OPZ3terb8v
+
+# 安全设置
+DEBUG=false
+TEST_MODE=false
+ENABLE_AI_CHECK=false
+SECURE_COOKIES=true
+CORS_ORIGINS=https://your-domain.com
+
+# 生产环境端口
+PORT=8001

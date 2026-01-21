@@ -1,75 +1,115 @@
-# WordPress 软文发布代理 - 配置指南
+# WordPress软文发布中间件 V2.1 - 部署指南
 
-## 🚨 发布失败的常见原因
+## 🚀 快速部署
 
-### 1. 环境变量未配置
-当前您的 `.env` 文件还是模板状态，需要填入真实配置：
-
+### 1. 环境准备
 ```bash
-# 当前配置（需要修改）
-BAIDU_API_KEY=your_baidu_api_key_here  # ❌ 需要真实API密钥
-BAIDU_SECRET_KEY=your_baidu_secret_key_here  # ❌ 需要真实密钥
-WP_DOMAIN=your-wordpress-domain.com  # ❌ 需要真实域名
-WP_USERNAME=your_wp_username  # ❌ 需要真实用户名
-WP_APP_PASSWORD=your_wp_application_password  # ❌ 需要真实密码
-VALID_AUTHOR_TOKENS=token1,token2,token3  # ❌ 需要设置真实令牌
+# 确保Python 3.8+已安装
+python --version
+
+# 克隆项目
+git clone https://github.com/nethao/Wordpressadd.git
+cd Wordpressadd
 ```
 
-## 📋 详细配置步骤
-
-### 步骤1：配置百度AI（必需）
-
-1. **注册百度智能云账号**
-   - 访问：https://cloud.baidu.com/
-   - 注册并完成实名认证
-
-2. **创建文本内容审核应用**
-   - 进入控制台：https://console.bce.baidu.com/ai/#/ai/antiporn/overview/index
-   - 点击"立即使用" → "创建应用"
-   - 应用名称：随意填写（如：软文审核）
-   - 应用描述：随意填写
-   - 创建成功后获取 API Key 和 Secret Key
-
-3. **更新配置**
-   ```bash
-   BAIDU_API_KEY=你获取的API_Key
-   BAIDU_SECRET_KEY=你获取的Secret_Key
-   ```
-
-### 步骤2：配置WordPress（必需）
-
-1. **准备WordPress站点**
-   - 确保WordPress版本 >= 5.0
-   - 确保支持REST API（默认开启）
-
-2. **创建应用密码**
-   - 登录WordPress后台
-   - 进入：用户 → 个人资料
-   - 滚动到底部"应用密码"部分
-   - 应用名称：填写"软文发布代理"
-   - 点击"添加新应用密码"
-   - 复制生成的密码（格式：xxxx xxxx xxxx xxxx）
-
-3. **检查自定义文章类型**
-   - 确保WordPress支持 `adv_posts` 文章类型
-   - 如果没有，需要安装相关插件或修改代码
-
-4. **更新配置**
-   ```bash
-   WP_DOMAIN=你的域名.com  # 不要包含 https://
-   WP_USERNAME=你的WordPress用户名
-   WP_APP_PASSWORD=刚才生成的应用密码
-   ```
-
-### 步骤3：设置作者令牌（必需）
-
+### 2. 安装依赖
 ```bash
-# 设置允许发布的令牌（可以是任意字符串）
-VALID_AUTHOR_TOKENS=abc123,def456,ghi789
+pip install -r requirements.txt
 ```
 
-## 🧪 测试配置
+### 3. 配置环境变量
+```bash
+# 复制配置模板
+cp .env.template .env
 
-### 方法1：使用测试模式（推荐）
+# 编辑配置文件
+# 填入您的WordPress和百度AI配置信息
+```
 
-如果您暂时没有百度AI或WordPress配置，可以先使用测试模式：
+### 4. 启动服务
+```bash
+# 启动V2.1版本（推荐）
+python main_v2.py
+
+# 或启动V1.0版本
+python main.py
+```
+
+### 5. 访问系统
+- 📝 发布页面：http://localhost:8001
+- ⚙️ 管理后台：http://localhost:8001/admin
+- 📚 API文档：http://localhost:8001/docs
+
+## 🔧 配置说明
+
+### WordPress配置
+```bash
+WP_DOMAIN=192.168.0.42          # 您的WordPress域名或IP
+WP_USERNAME=waibao              # WordPress用户名
+WP_APP_PASSWORD=your_app_pass   # WordPress应用密码
+```
+
+### 百度AI配置
+```bash
+BAIDU_API_KEY=your_api_key      # 百度智能云API Key
+BAIDU_SECRET_KEY=your_secret    # 百度智能云Secret Key
+```
+
+### 安全配置
+```bash
+CLIENT_AUTH_TOKEN=secure_token  # 外包身份验证令牌
+TEST_MODE=false                 # 生产环境设为false
+```
+
+## 🧪 测试验证
+
+### 测试WordPress连接
+```bash
+python wordpress_client_requests.py
+```
+
+### 运行完整测试
+```bash
+python test_v2.py
+```
+
+### 测试发布功能
+1. 访问 http://localhost:8001
+2. 输入测试文章内容
+3. 点击发布按钮
+4. 检查WordPress后台是否收到文章
+
+## 🛠️ 故障排除
+
+### 常见问题
+
+1. **WordPress连接失败**
+   - 检查WP_DOMAIN配置是否正确
+   - 确认WordPress应用密码是否有效
+   - 验证网络连接是否正常
+
+2. **百度AI审核失败**
+   - 检查API Key和Secret Key是否正确
+   - 确认百度智能云账户余额充足
+   - 可以设置TEST_MODE=true跳过审核测试
+
+3. **端口占用问题**
+   - 修改.env文件中的PORT配置
+   - 或使用命令：`netstat -ano | findstr :8001`
+
+### 日志查看
+系统会在控制台输出详细的运行日志，包括：
+- API请求响应
+- 错误信息和堆栈跟踪
+- WordPress连接状态
+- 百度AI审核结果
+
+## 📞 技术支持
+
+如遇问题请查看：
+- [WordPress插件修复指南](WordPress插件修复指南.md)
+- [问题诊断报告](WordPress问题诊断报告.md)
+- [项目汇报](汇报.md)
+
+---
+**部署成功后，您就可以开始使用这个强大的WordPress软文发布中间件了！** 🎉

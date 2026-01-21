@@ -687,7 +687,7 @@ async def logout(response: Response, session_id: str = Cookie(None, alias="sessi
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request, current_user: Dict[str, Any] = Depends(require_login)):
     """主页面 - 需要登录"""
-    return templates.TemplateResponse("index_v2_3.html", {
+    return templates.TemplateResponse("index_v2_4.html", {
         "request": request,
         "current_user": current_user
     })

@@ -126,11 +126,27 @@
     <div class="container">
         <!-- 头部 -->
         <header class="header">
-            <h1>📝 WordPress 软文发布中间件 V2.1</h1>
-            <p>适配WordPress插件V2.1版本，集成百度AI审核的智能发布平台</p>
-            <div style="margin-top: 15px;">
-                <a href="/admin" class="btn btn-secondary">管理后台</a>
-                <a href="/docs" class="btn btn-secondary">API文档</a>
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+                <div>
+                    <h1>📝 WordPress 软文发布中间件 V2.2</h1>
+                    <p>集成多角色登录系统，适配WordPress插件V2.1版本，集成百度AI审核的智能发布平台</p>
+                </div>
+                
+                <!-- 用户信息和操作区域 -->
+                <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                    <div id="userInfo" style="color: rgba(255,255,255,0.9); font-size: 0.9rem;">
+                        <div>👤 <span id="username">加载中...</span></div>
+                        <div>🏷️ <span id="userRole">加载中...</span></div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <div id="adminLink" style="display: none;">
+                            <a href="/admin" class="btn btn-secondary">⚙️ 管理后台</a>
+                        </div>
+                        <a href="/docs" class="btn btn-secondary">📚 API文档</a>
+                        <button onclick="logout()" class="btn btn-secondary">🚪 退出登录</button>
+                    </div>
+                </div>
             </div>
         </header>
 
@@ -230,7 +246,7 @@
                 <!-- 服务状态面板 -->
                 <div class="status-panel">
                     <h3 class="panel-title">
-                        🔧 服务状态 V2.1
+                        🔧 服务状态 V2.2
                     </h3>
                     
                     <div id="serviceStatus" class="status-indicator status-offline">
@@ -286,19 +302,19 @@
         <!-- 功能说明 -->
         <div class="publish-form" style="margin-top: 20px;">
             <h3 class="panel-title">
-                📋 V2.1版本更新说明
+                📋 V2.2版本更新说明
             </h3>
             
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 15px;">
                 <div>
-                    <h4 style="color: #4a5568; margin-bottom: 8px;">🆕 V2.1新特性</h4>
+                    <h4 style="color: #4a5568; margin-bottom: 8px;">🆕 V2.2新特性</h4>
                     <ul style="color: #718096; line-height: 1.6;">
-                        <li>适配WordPress插件V2.1版本</li>
-                        <li>新增富文本编辑器支持</li>
-                        <li>自动文章分类（插件处理）</li>
-                        <li>增强的容错机制</li>
-                        <li>本地测试环境优化</li>
-                        <li>配置管理界面</li>
+                        <li>多角色登录系统（管理员 vs 外包人员）</li>
+                        <li>基于Session的身份认证</li>
+                        <li>路由权限控制</li>
+                        <li>24小时会话过期机制</li>
+                        <li>增强的安全性和用户体验</li>
+                        <li>完整的登录状态管理</li>
                     </ul>
                 </div>
                 
@@ -339,7 +355,7 @@
 
         <!-- 页脚 -->
         <footer style="text-align: center; margin-top: 40px; padding: 20px; color: rgba(255,255,255,0.7);">
-            <p>WordPress 软文发布中间件 V2.1 | 适配WordPress插件V2.1版本</p>
+            <p>WordPress 软文发布中间件 V2.2 | 集成多角色登录系统</p>
             <p style="font-size: 0.9rem; margin-top: 8px;">
                 🔗 <a href="/docs" style="color: rgba(255,255,255,0.8);">API文档</a> | 
                 🔍 <a href="/health" style="color: rgba(255,255,255,0.8);">服务状态</a> |
@@ -348,6 +364,6 @@
         </footer>
     </div>
 
-    <script src="/static/js/app_v2.js"></script>
+    <script src="/static/js/app_v2_2.js"></script>
 </body>
 </html>

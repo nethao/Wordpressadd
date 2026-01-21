@@ -202,12 +202,26 @@
     <div class="container">
         <!-- 头部 -->
         <header class="header">
-            <h1>⚙️ 管理后台 V2.1</h1>
-            <p>WordPress 软文发布中间件系统监控与配置管理</p>
-            <div style="margin-top: 15px;">
-                <a href="/" class="btn btn-secondary">返回发布页面</a>
-                <a href="/docs" class="btn btn-secondary">API文档</a>
-                <button onclick="exportSystemReport()" class="btn btn-secondary">导出系统报告</button>
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+                <div>
+                    <h1>⚙️ 管理后台 V2.2</h1>
+                    <p>WordPress 软文发布中间件系统监控与配置管理</p>
+                </div>
+                
+                <!-- 用户信息和操作区域 -->
+                <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                    <div id="userInfo" style="color: rgba(255,255,255,0.9); font-size: 0.9rem;">
+                        <div>👤 <span id="username">加载中...</span></div>
+                        <div>🏷️ <span id="userRole">加载中...</span></div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <a href="/" class="btn btn-secondary">📝 发布页面</a>
+                        <a href="/docs" class="btn btn-secondary">📚 API文档</a>
+                        <button onclick="exportSystemReport()" class="btn btn-secondary">📊 导出系统报告</button>
+                        <button onclick="logout()" class="btn btn-secondary">🚪 退出登录</button>
+                    </div>
+                </div>
             </div>
         </header>
 
@@ -372,6 +386,6 @@
         🔄
     </button>
 
-    <script src="/static/js/admin_v2.js"></script>
+    <script src="/static/js/admin_v2_2.js"></script>
 </body>
 </html>

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-WordPress 软文发布中间件 V2.4 - 最终生产版本
-功能优化与审核逻辑调整
-增加代码模式、发布历史面板及审核开关优化
+WordPress 软文发布中间件 V2.4 - 宝塔生产环境版本
+适配宝塔面板部署，优化路径配置和生产环境设置
 """
 
 import os
+import sys
 import json
 import time
 import base64
@@ -14,6 +14,7 @@ import asyncio
 import aiohttp
 import urllib3
 import secrets
+from pathlib import Path
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
 
@@ -27,25 +28,42 @@ from pydantic import BaseModel, Field
 from dotenv import load_dotenv, set_key
 import uvicorn
 
-# 禁用SSL警告（本地测试环境）
+# 禁用SSL警告（生产环境可选）
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# 加载环境变量
-load_dotenv()
+# 获取当前脚本所在目录，适配宝塔环境
+BASE_DIR = Path(__file__).resolve().parent
+
+# 加载环境变量 - 宝塔环境适配
+env_file = BASE_DIR / '.env'
+if env_file.exists():
+    load_dotenv(env_file)
+else:
+    # 如果.env不存在，尝试加载.env.production
+    prod_env = BASE_DIR / '.env.production'
+    if prod_env.exists():
+        load_dotenv(prod_env)
 
 app = FastAPI(
     title="文章发布系统 V2.4",
-    description="功能优化版本，增加代码模式、发布历史面板及审核开关优化",
+    description="宝塔生产环境版本，功能优化与路径适配",
     version="2.4.0"
 )
 
-# 挂载静态文件
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# 挂载静态文件 - 使用绝对路径适配宝塔环境
+static_dir = BASE_DIR / "static"
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-# 模板配置
-templates = Jinja2Templates(directory="templates")
+# 模板配置 - 使用绝对路径适配宝塔环境
+template_dir = BASE_DIR / "templates"
+if template_dir.exists():
+    templates = Jinja2Templates(directory=str(template_dir))
+else:
+    # 如果templates目录不存在，创建一个空的模板对象
+    templates = None
 
-# 添加CORS中间件 - 安全配置
+# 添加CORS中间件 - 生产环境安全配置
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:8001", "http://localhost:8004", "https://your-domain.com"],
@@ -278,6 +296,28 @@ class WordPressClient:
         if not self.test_mode and not all([self.wp_domain, self.wp_username, self.wp_app_password]):
             print("⚠️ WordPress配置信息不完整，将使用测试模式")
             self.test_mode = True
+        
+        if not self.test_mode:
+            # 处理域名格式 - 移除协议前缀
+            domain = self.wp_domain
+            if domain.startswith('http://'):
+                domain = domain[7:]
+            elif domain.startswith('https://'):
+                domain = domain[8:]
+            
+            # 构建API基础URL - 生产环境使用HTTPS
+            if '192.168.' in domain or 'localhost' in domain or domain.startswith('127.'):
+                # 本地环境使用HTTP
+                self.api_base = f"http://{domain}/wp-json/wp/v2"
+            else:
+                # 生产环境使用HTTPS
+                self.api_base = f"https://{domain}/wp-json/wp/v2"
+            
+            # 构建Basic Auth头
+            credentials = f"{self.wp_username}:{self.wp_app_password}"
+            credentials_clean = credentials.strip()
+            encoded_credentials = base64.b64encode(credentials_clean.encode('utf-8')).decode('ascii')
+            self.auth_header = f"Basic {encoded_credentials}"
     
     async def get_publish_history(self, limit: int = 20) -> List[Dict[str, Any]]:
         """获取发布历史 - V2.4新增功能"""
@@ -339,26 +379,19 @@ class WordPressClient:
         
         # 正常模式：真实的WordPress API调用
         try:
-            # 构建WordPress REST API URL - 优先使用自定义端点
-            primary_url = f"http://{self.wp_domain}/wp-json/wp/v2/adv_posts"
-            fallback_url = f"http://{self.wp_domain}/wp-json/wp/v2/posts"
-            
-            # 准备认证信息
-            auth_string = f"{self.wp_username}:{self.wp_app_password}"
-            auth_bytes = auth_string.encode('ascii')
-            auth_b64 = base64.b64encode(auth_bytes).decode('ascii')
+            # 构建WordPress REST API URL - 使用正确的HTTPS协议
+            primary_url = f"{self.api_base}/adv_posts"
+            fallback_url = f"{self.api_base}/posts"
             
             # 准备文章数据
             post_data = {
                 "title": title,
                 "content": content,
-                "status": "pending",  # 设为待审核状态，避免直接发布
-                "categories": [1],    # 默认分类ID为1（通常是"未分类"）
-                "author": 1           # 默认作者ID为1
+                "status": "pending"  # 设为待审核状态，避免直接发布
             }
             
             headers = {
-                "Authorization": f"Basic {auth_b64}",
+                "Authorization": self.auth_header,
                 "Content-Type": "application/json",
                 "User-Agent": "WordPress-Publisher-V2.4.1"
             }
@@ -366,10 +399,29 @@ class WordPressClient:
             print(f"📡 尝试发布到WordPress: {title}")
             print(f"🔗 主要端点: {primary_url}")
             
-            # 使用aiohttp进行异步HTTP请求
+            # 使用aiohttp进行异步HTTP请求 - 修复SSL问题
+            connector = aiohttp.TCPConnector(
+                ssl=False,  # 禁用SSL验证
+                limit=100,
+                limit_per_host=30,
+                ttl_dns_cache=300,
+                use_dns_cache=True,
+            )
+            
+            timeout = aiohttp.ClientTimeout(
+                total=30,
+                connect=10,
+                sock_read=10
+            )
+            
             async with aiohttp.ClientSession(
-                connector=aiohttp.TCPConnector(ssl=False),  # 本地测试禁用SSL
-                timeout=aiohttp.ClientTimeout(total=30)
+                connector=connector,
+                timeout=timeout,
+                headers={
+                    'User-Agent': 'WordPress-Publisher-V2.4/aiohttp',
+                    'Accept': 'application/json',
+                    'Accept-Encoding': 'gzip, deflate'
+                }
             ) as session:
                 
                 # 首先尝试自定义端点 /adv_posts
@@ -390,6 +442,24 @@ class WordPressClient:
                             print(f"🔗 文章链接: {result.get('link', 'N/A')}")
                             print(f"📝 文章状态: {result.get('status', 'N/A')}")
                             return result
+                        elif response.status == 401:
+                            # 认证失败
+                            error_data = await response.json()
+                            error_msg = error_data.get('message', '认证失败')
+                            print(f"❌ WordPress认证失败: {error_msg}")
+                            raise HTTPException(
+                                status_code=401,
+                                detail=f"WordPress认证失败: {error_msg}"
+                            )
+                        elif response.status == 403:
+                            # 权限不足
+                            error_data = await response.json()
+                            error_msg = error_data.get('message', '权限不足')
+                            print(f"❌ WordPress权限不足: {error_msg}")
+                            raise HTTPException(
+                                status_code=403,
+                                detail=f"WordPress权限不足: {error_msg}"
+                            )
                         elif response.status == 404:
                             print("⚠️ 自定义端点不存在，尝试标准端点")
                             raise aiohttp.ClientResponseError(

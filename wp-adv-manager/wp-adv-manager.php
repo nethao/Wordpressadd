@@ -34,8 +34,37 @@ function adv_mgr_setup_post_type() {
         'menu_icon' => 'dashicons-feedback',
         'supports' => array('title', 'editor', 'author'),
         'taxonomies' => array('category'), // 挂载原生分类
-        'rewrite' => array('slug' => 'adv-posts'), // 动态URL前缀
+        'rewrite' => array(
+            'slug' => 'adv-posts',
+            'with_front' => false
+        ),
     ));
+}
+
+/**
+ * 动态替换文章链接为ID.htm格式
+ */
+add_filter('post_type_link', 'adv_mgr_post_type_link', 10, 2);
+function adv_mgr_post_type_link($post_link, $post) {
+    // 只处理adv_posts类型的文章
+    if ($post->post_type === 'adv_posts') {
+        // 生成ID.htm格式的链接
+        $post_link = home_url('/adv-posts/' . $post->ID . '.htm');
+    }
+    return $post_link;
+}
+
+/**
+ * 添加自定义rewrite规则以支持ID.htm格式
+ */
+add_action('init', 'adv_mgr_add_rewrite_rules', 11);
+function adv_mgr_add_rewrite_rules() {
+    // 添加rewrite规则：/adv-posts/123.htm -> /index.php?post_type=adv_posts&p=123
+    add_rewrite_rule(
+        '^adv-posts/([0-9]+)\.htm/?$',
+        'index.php?post_type=adv_posts&p=$matches[1]',
+        'top'
+    );
 }
 
 /**
@@ -157,10 +186,38 @@ add_action('restrict_manage_posts', function() {
 });
 
 /**
- * 6. 定时清理任务
+ * 6. 定时清理任务和数据库表创建
  */
 register_activation_hook(__FILE__, function() {
-    if (!wp_next_scheduled('adv_mgr_daily_cleanup')) wp_schedule_event(time(), 'daily', 'adv_mgr_daily_cleanup');
+    // 1. 创建定时清理任务
+    if (!wp_next_scheduled('adv_mgr_daily_cleanup')) {
+        wp_schedule_event(time(), 'daily', 'adv_mgr_daily_cleanup');
+    }
+    
+    // 2. 创建发稿日志表（用于永久统计）
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'adv_publish_log';
+    $charset_collate = $wpdb->get_charset_collate();
+    
+    $sql = "CREATE TABLE IF NOT EXISTS $table_name (
+        id bigint(20) NOT NULL AUTO_INCREMENT,
+        post_id bigint(20) NOT NULL,
+        post_title text NOT NULL,
+        publish_date datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        operator_user varchar(100) DEFAULT '' NOT NULL,
+        PRIMARY KEY (id),
+        KEY post_id (post_id),
+        KEY publish_date (publish_date)
+    ) $charset_collate;";
+    
+    require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+    dbDelta($sql);
+    
+    // 3. 刷新rewrite规则
+    flush_rewrite_rules();
+    
+    // 记录插件激活日志
+    error_log("WordPress软文管理插件V2.4激活成功，日志表已创建，rewrite规则已刷新");
 });
 add_action('adv_mgr_daily_cleanup', function() {
     $days = get_option('adv_delete_days', 45);
@@ -171,6 +228,7 @@ add_action('adv_mgr_daily_cleanup', function() {
 /**
  * 强行绕过 REST API 发布权限检查并兼容旧版 WP 方法
  * 修复 Call to undefined method WP_REST_Request::get_path() 错误
+ * 生产环境版本：移除临时授权逻辑，使用正确的权限验证
  */
 add_filter('rest_pre_dispatch', function($result, $server, $request) {
     // 1. 兼容性获取当前请求的路由
@@ -178,10 +236,11 @@ add_filter('rest_pre_dispatch', function($result, $server, $request) {
 
     // 2. 如果是向我们的自定义文章类型发送 POST 请求
     if ($request->get_method() == 'POST' && strpos($route, '/wp/v2/adv_posts') !== false) {
-        // 3. 暴力授权：强制将当前用户设为管理员 (ID 1)
-        // 这将解决 401 rest_cannot_create 权限不足的问题
-        if (function_exists('wp_set_current_user')) {
-            wp_set_current_user(1); 
+        // 3. 生产环境：确保用户已正确认证
+        // 移除了wp_set_current_user(1)临时授权逻辑
+        // 现在依赖正确的WordPress认证机制
+        if (!is_user_logged_in() && !current_user_can('edit_posts')) {
+            return new WP_Error('rest_cannot_create', '您没有权限创建文章', array('status' => 401));
         }
     }
     return $result;
@@ -230,10 +289,29 @@ function adv_mgr_handle_single_approve() {
     ));
     
     if ($result) {
-        // 记录操作日志
+        // 记录到永久日志表 - 关键INSERT语句
+        global $wpdb;
+        $log_table = $wpdb->prefix . 'adv_publish_log';
         $post_title = get_the_title($post_id);
-        $current_user = wp_get_current_user()->user_login;
-        error_log("软文审核通过: ID={$post_id}, 标题={$post_title}, 操作人={$current_user}");
+        $current_user = wp_get_current_user();
+        $operator = $current_user ? $current_user->user_login : 'system';
+        
+        // 防止重复记录
+        $exists = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM $log_table WHERE post_id = %d", 
+            $post_id
+        ));
+        
+        if (!$exists) {
+            $wpdb->insert($log_table, array(
+                'post_id' => $post_id,
+                'post_title' => $post_title,
+                'operator_user' => $operator
+            ));
+        }
+        
+        // 记录操作日志
+        error_log("软文审核通过: ID={$post_id}, 标题={$post_title}, 操作人={$operator}");
         
         // 重定向回列表页并显示成功消息
         wp_redirect(add_query_arg(array(
@@ -269,7 +347,12 @@ function adv_mgr_handle_bulk_approve($redirect_to, $doaction, $post_ids) {
     }
     
     $approved_count = 0;
-    $current_user = wp_get_current_user()->user_login;
+    $current_user = wp_get_current_user();
+    $operator = $current_user ? $current_user->user_login : 'system';
+    
+    // 获取日志表
+    global $wpdb;
+    $log_table = $wpdb->prefix . 'adv_publish_log';
     
     foreach ($post_ids as $post_id) {
         $post = get_post($post_id);
@@ -283,9 +366,26 @@ function adv_mgr_handle_bulk_approve($redirect_to, $doaction, $post_ids) {
             
             if ($result) {
                 $approved_count++;
-                // 记录操作日志
+                
+                // 记录到永久日志表 - 关键INSERT语句
                 $post_title = get_the_title($post_id);
-                error_log("软文批量审核通过: ID={$post_id}, 标题={$post_title}, 操作人={$current_user}");
+                
+                // 防止重复记录
+                $exists = $wpdb->get_var($wpdb->prepare(
+                    "SELECT id FROM $log_table WHERE post_id = %d", 
+                    $post_id
+                ));
+                
+                if (!$exists) {
+                    $wpdb->insert($log_table, array(
+                        'post_id' => $post_id,
+                        'post_title' => $post_title,
+                        'operator_user' => $operator
+                    ));
+                }
+                
+                // 记录操作日志
+                error_log("软文批量审核通过: ID={$post_id}, 标题={$post_title}, 操作人={$operator}");
             }
         }
     }
@@ -351,45 +451,126 @@ add_action('admin_menu', function() {
 });
 
 /**
- * 12. 统计页面显示逻辑
+ * 12. 统计页面显示逻辑 - 基于永久日志表
  */
 function adv_mgr_stats_page() {
     // 获取日期筛选参数（默认本月）
     $start_date = isset($_GET['start_date']) ? sanitize_text_field($_GET['start_date']) : date('Y-m-01');
     $end_date = isset($_GET['end_date']) ? sanitize_text_field($_GET['end_date']) : date('Y-m-d');
+    
+    // 快捷日期选择处理
+    $preset = isset($_GET['preset']) ? sanitize_text_field($_GET['preset']) : '';
+    if ($preset == 'today') {
+        $start_date = $end_date = date('Y-m-d');
+    } elseif ($preset == 'week') {
+        $start_date = date('Y-m-d', strtotime('monday this week'));
+        $end_date = date('Y-m-d', strtotime('sunday this week'));
+    } elseif ($preset == 'month') {
+        $start_date = date('Y-m-01');
+        $end_date = date('Y-m-t');
+    }
 
-    // 查询已发布文章总数
+    // 查询已审核通过的文章总数 - 从日志表读取，不受文章删除影响
     global $wpdb;
+    $log_table = $wpdb->prefix . 'adv_publish_log';
+    
     $count = $wpdb->get_var($wpdb->prepare(
-        "SELECT COUNT(ID) FROM $wpdb->posts 
-         WHERE post_type = 'adv_posts' 
-         AND post_status = 'publish' 
-         AND post_date >= %s 
-         AND post_date <= %s",
+        "SELECT COUNT(id) FROM $log_table 
+         WHERE publish_date >= %s 
+         AND publish_date <= %s",
         $start_date . ' 00:00:00',
         $end_date . ' 23:59:59'
+    ));
+
+    // 获取当前月份统计（用于对比Python中间件）
+    $current_month_start = date('Y-m-01');
+    $current_month_end = date('Y-m-t');
+    $current_month_count = $wpdb->get_var($wpdb->prepare(
+        "SELECT COUNT(id) FROM $log_table 
+         WHERE publish_date >= %s 
+         AND publish_date <= %s",
+        $current_month_start . ' 00:00:00',
+        $current_month_end . ' 23:59:59'
     ));
 
     ?>
     <div class="wrap">
         <h1>📊 发稿统计报表</h1>
         <div class="card" style="max-width: 100%; margin-top: 20px; padding: 20px;">
-            <form method="get">
+            
+            <!-- 快捷日期选择 -->
+            <div style="margin-bottom: 15px;">
+                <strong>快捷选择：</strong>
+                <a href="?post_type=adv_posts&page=adv-stats&preset=today" class="button <?php echo ($preset == 'today') ? 'button-primary' : ''; ?>">今日</a>
+                <a href="?post_type=adv_posts&page=adv-stats&preset=week" class="button <?php echo ($preset == 'week') ? 'button-primary' : ''; ?>">本周</a>
+                <a href="?post_type=adv_posts&page=adv-stats&preset=month" class="button <?php echo ($preset == 'month') ? 'button-primary' : ''; ?>">本月</a>
+            </div>
+            
+            <!-- 自定义日期范围 -->
+            <form method="get" style="margin-bottom: 20px;">
                 <input type="hidden" name="post_type" value="adv_posts">
                 <input type="hidden" name="page" value="adv-stats">
-                选择日期：
-                <input type="date" name="start_date" value="<?php echo $start_date; ?>"> 至 
-                <input type="date" name="end_date" value="<?php echo $end_date; ?>">
-                <button type="submit" class="button button-primary">开始筛选</button>
-                <a href="?post_type=adv_posts&page=adv-stats" class="button">本月</a>
+                <strong>自定义范围：</strong>
+                <input type="date" name="start_date" value="<?php echo esc_attr($start_date); ?>"> 至 
+                <input type="date" name="end_date" value="<?php echo esc_attr($end_date); ?>">
+                <button type="submit" class="button button-primary">筛选统计</button>
             </form>
+            
             <hr>
-            <div style="display: flex; gap: 20px; margin-top: 20px;">
-                <div style="background: #f0f6fb; padding: 20px; border-radius: 8px; flex: 1; border-left: 4px solid #2271b1;">
-                    <h3 style="margin-top:0;">当前范围内成功发稿</h3>
-                    <span style="font-size: 32px; font-weight: bold; color: #2271b1;"><?php echo $count; ?></span> 篇
+            
+            <!-- 统计结果展示 -->
+            <div style="display: flex; gap: 20px; margin-top: 20px; flex-wrap: wrap;">
+                
+                <!-- 当前筛选范围统计 -->
+                <div style="background: #f0f6fb; padding: 20px; border-radius: 8px; flex: 1; min-width: 250px; border-left: 4px solid #2271b1;">
+                    <h3 style="margin-top:0; color: #2271b1;">📈 筛选范围发稿量</h3>
+                    <div style="font-size: 32px; font-weight: bold; color: #2271b1; margin: 10px 0;"><?php echo $count; ?></div>
+                    <div style="color: #666; font-size: 14px;">
+                        <?php echo $start_date; ?> 至 <?php echo $end_date; ?>
+                    </div>
                 </div>
+                
+                <!-- 本月总计（与Python中间件对比） -->
+                <div style="background: #f6f7f7; padding: 20px; border-radius: 8px; flex: 1; min-width: 250px; border-left: 4px solid #50575e;">
+                    <h3 style="margin-top:0; color: #50575e;">📊 本月总发稿量</h3>
+                    <div style="font-size: 32px; font-weight: bold; color: #50575e; margin: 10px 0;"><?php echo $current_month_count; ?></div>
+                    <div style="color: #666; font-size: 14px;">
+                        基于审核日志，永久可追溯
+                    </div>
                 </div>
+                
+                <!-- 日志表状态 -->
+                <?php 
+                $total_logs = $wpdb->get_var("SELECT COUNT(id) FROM $log_table");
+                $latest_log = $wpdb->get_row("SELECT post_title, publish_date, operator_user FROM $log_table ORDER BY publish_date DESC LIMIT 1");
+                ?>
+                <div style="background: #f0f9ff; padding: 20px; border-radius: 8px; flex: 1; min-width: 250px; border-left: 4px solid #0ea5e9;">
+                    <h3 style="margin-top:0; color: #0ea5e9;">📝 日志表状态</h3>
+                    <div style="font-size: 32px; font-weight: bold; color: #0ea5e9; margin: 10px 0;"><?php echo $total_logs; ?></div>
+                    <div style="color: #666; font-size: 14px;">
+                        总审核记录数
+                        <?php if ($latest_log): ?>
+                        <br>最新：<?php echo esc_html($latest_log->post_title); ?>
+                        <br>时间：<?php echo $latest_log->publish_date; ?>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                
+            </div>
+            
+            <!-- 数据说明 -->
+            <div style="margin-top: 20px; padding: 15px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px;">
+                <h4 style="margin-top: 0; color: #856404;">📋 统计规则说明</h4>
+                <ul style="margin: 0; color: #856404;">
+                    <li><strong>统计对象：</strong>所有通过审核的软文（从pending变为publish状态的文章）</li>
+                    <li><strong>数据来源：</strong>基于审核日志表（adv_publish_log），不受文章删除影响</li>
+                    <li><strong>核心逻辑：</strong>即使文章45天后被自动删除，依然计入有效稿件统计</li>
+                    <li><strong>时间基准：</strong>以审核通过时间为准，确保结算数据的准确性</li>
+                    <li><strong>数据一致性：</strong>与Python中间件的"本月发布计数"逻辑完全一致</li>
+                    <li><strong>结算保障：</strong>专为结算设计，确保数据永久可追溯</li>
+                </ul>
+            </div>
+            
         </div>
     </div>
     <?php

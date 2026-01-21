@@ -243,7 +243,7 @@ function updateConfigForm(config) {
     document.getElementById('testMode').checked = config.test_mode || false;
     
     // V2.4新增：AI审核开关
-    document.getElementById('enableAiCheck').checked = config.enable_ai_check !== false; // 默认启用
+    document.getElementById('enableAiCheck').checked = config.enable_ai_check === true;
 }
 
 // 更新配置状态显示
@@ -316,10 +316,15 @@ async function saveConfiguration() {
         
         if (result.status === 'success') {
             showConfigMessage('配置保存成功！', 'success');
-            // 重新加载配置
+            
+            // 直接更新当前配置对象，避免重新从服务器加载
+            Object.assign(currentConfig, filteredConfig);
+            updateConfigStatus(currentConfig);
+            
+            // 延迟5秒后重新加载配置进行验证（可选）
             setTimeout(() => {
                 loadCurrentConfig();
-            }, 1000);
+            }, 5000);
         } else {
             showConfigMessage('配置保存失败: ' + result.message, 'error');
         }

@@ -392,13 +392,25 @@ add_action('rest_insert_adv_posts', function($post, $request, $creating) {
         // 方法1：通过API请求参数判断
         if ($request->get_param('headline_article')) {
             $is_headline = true;
+            error_log("头条文章识别: 通过API参数 headline_article=true");
         }
         
-        // 方法2：通过标题前缀判断（如果标题以"📋"或"头条"开头）
+        // 方法2：通过分类判断（如果包含16035分类）
+        $categories = $request->get_param('categories');
+        if (is_array($categories) && in_array(16035, $categories)) {
+            $is_headline = true;
+            error_log("头条文章识别: 通过分类ID 16035");
+        }
+        
+        // 方法3：通过标题前缀判断（如果标题以"📋"或"头条"开头）
         $title = $post->post_title;
         if (strpos($title, '📋') === 0 || strpos($title, '头条') === 0) {
             $is_headline = true;
+            error_log("头条文章识别: 通过标题前缀");
         }
+        
+        // 记录调试信息
+        error_log("文章创建调试: 标题={$title}, 是否头条={$is_headline}, 请求参数=" . json_encode($request->get_params()));
         
         if ($is_headline) {
             // 头条文章：分配到指定分类并保持草稿状态
@@ -411,7 +423,7 @@ add_action('rest_insert_adv_posts', function($post, $request, $creating) {
             ));
             
             // 记录头条文章日志
-            error_log("头条文章创建: 文章ID={$post->ID}, 标题={$title}, 状态=草稿, 分类=头条文章(ID:16035)");
+            error_log("头条文章创建成功: 文章ID={$post->ID}, 标题={$title}, 状态=草稿, 分类=头条文章(ID:16035)");
             
         } else if ($random_enabled) {
             // 普通软文：随机分配分类

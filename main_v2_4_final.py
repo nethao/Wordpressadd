@@ -407,6 +407,7 @@ class WordPressClient:
                     "headline_article": True  # 标记为头条文章
                 }
                 print(f"📋 准备发布头条文章: {title}")
+                print(f"📋 头条文章数据: {post_data}")
             else:
                 # 普通文章：随机分配分类，待审核状态
                 post_data = {
@@ -415,6 +416,7 @@ class WordPressClient:
                     "status": "pending"  # 设为待审核状态，避免直接发布
                 }
                 print(f"📤 准备发布普通文章: {title}")
+                print(f"📤 普通文章数据: {post_data}")
             
             headers = {
                 "Authorization": self.auth_header,

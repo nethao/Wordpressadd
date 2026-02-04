@@ -363,6 +363,33 @@
             box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
         }
         
+        .btn-headline {
+            background: linear-gradient(135deg, #ff6900 0%, #ff8c42 100%);
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-headline:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(255, 105, 0, 0.3);
+        }
+        
+        .btn-headline::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
+        }
+        
+        .btn-headline:hover::before {
+            left: 100%;
+        }
+        
         .btn-secondary {
             background: #f7fafc;
             color: #4a5568;
@@ -614,6 +641,9 @@
                     <div class="form-actions">
                         <button type="submit" id="submitBtn" class="btn btn-primary">
                             📤 发布文章
+                        </button>
+                        <button type="button" id="headlineBtn" class="btn btn-headline" onclick="publishToHeadline()">
+                            📋 发布到头条
                         </button>
                         <button type="button" onclick="resetForm();" class="btn btn-secondary">
                             🔄 重置表单

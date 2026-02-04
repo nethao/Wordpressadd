@@ -1,8 +1,8 @@
 <?php
 /*
-Plugin Name: 软文广告高级管理系统 (V2.4 随机发布版)
-Description: 支持全站点随机栏目发布、状态管理、定时删除、API强制开启及审核通过功能。软文将随机分布到各个栏目中，提高内容分布的自然性。
-Version: 2.4
+Plugin Name: 软文广告高级管理系统 (V2.5 头条文章版)
+Description: 支持全站点随机栏目发布、头条文章草稿管理、状态管理、定时删除、API强制开启及审核通过功能。新增📋头条文章栏目，专门用于草稿保存和查看。
+Version: 2.5
 Author: Gemini Thought Partner
 */
 
@@ -112,6 +112,40 @@ function adv_mgr_render_settings() {
                             echo implode('、', array_slice($cat_names, 0, 10));
                             if (count($cat_names) > 10) echo '...等';
                             ?>
+                        </p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">📋 头条文章设置</th>
+                    <td>
+                        <p class="description">
+                            <strong>🎯 头条文章功能说明</strong><br>
+                            • 头条文章分类ID：<strong>16035</strong><br>
+                            • 所有头条文章将自动保存为<strong>草稿状态</strong><br>
+                            • 头条文章<strong>不会发布到前端</strong>，仅供后台查看和管理<br>
+                            • 可通过标题前缀"📋"或"头条"自动识别<br>
+                            • 也可通过API参数 <code>headline_article=true</code> 指定
+                        </p>
+                        <?php
+                        // 统计头条文章数量
+                        $headline_posts = get_posts(array(
+                            'post_type' => 'adv_posts',
+                            'post_status' => 'draft',
+                            'category' => 16035,
+                            'posts_per_page' => -1,
+                            'fields' => 'ids'
+                        ));
+                        $headline_count = count($headline_posts);
+                        ?>
+                        <p>
+                            <strong>当前头条文章数量：</strong>
+                            <span style="color: #ff6900; font-weight: bold; font-size: 16px;"><?php echo $headline_count; ?></span> 篇
+                            <?php if ($headline_count > 0): ?>
+                            <a href="<?php echo admin_url('edit.php?post_type=adv_posts&headline_filter=headline'); ?>" 
+                               class="button button-secondary" style="margin-left: 10px;">
+                                📋 查看头条文章
+                            </a>
+                            <?php endif; ?>
                         </p>
                     </td>
                 </tr>
@@ -247,20 +281,21 @@ function adv_mgr_redistribute_page() {
 }
 
 /**
- * 执行所有软文的随机重分配
+ * 执行所有软文的随机重分配（排除头条文章）
  */
 function adv_mgr_redistribute_all_posts() {
-    // 获取所有已发布的软文
+    // 获取所有已发布的软文（排除头条文章分类）
     $posts = get_posts(array(
         'post_type' => 'adv_posts',
         'post_status' => 'publish',
-        'posts_per_page' => -1
+        'posts_per_page' => -1,
+        'category__not_in' => array(16035) // 排除头条文章分类
     ));
     
-    // 获取所有可用分类（排除未分类）
+    // 获取所有可用分类（排除未分类和头条文章）
     $categories = get_categories(array(
         'hide_empty' => 0,
-        'exclude' => array(1)
+        'exclude' => array(1, 16035) // 排除未分类和头条文章
     ));
     
     if (empty($categories)) {
@@ -290,46 +325,99 @@ function adv_mgr_redistribute_all_posts() {
 /**
  * 4. 移除前端隐藏逻辑 - 随机发布模式下不需要隐藏特定分类
  * 软文将随机分布在各个栏目中，与普通文章混合显示
+ * 头条文章（ID=16035）只保存为草稿，不会在前端显示
  */
 add_action('pre_get_posts', 'adv_mgr_random_display_logic');
 function adv_mgr_random_display_logic($query) {
-    // 后台不拦截，非主查询不拦截
-    if (is_admin() || !$query->is_main_query()) return;
-    
-    // 随机发布模式下，软文与普通文章一起正常显示
-    // 不再进行特殊的隐藏处理，让内容自然分布
-    
-    // 在所有页面类型中都允许显示 adv_posts 类型的文章
-    if ($query->is_home() || $query->is_search() || $query->is_archive() || $query->is_category()) {
-        $post_types = $query->get('post_type');
-        if (empty($post_types)) {
-            $post_types = array('post');
-        }
-        if (!is_array($post_types)) {
-            $post_types = array($post_types);
-        }
+    // 后台管理页面的头条文章筛选逻辑
+    if (is_admin() && $query->is_main_query()) {
+        global $pagenow, $typenow;
         
-        // 添加 adv_posts 到查询的文章类型中
-        if (!in_array('adv_posts', $post_types)) {
-            $post_types[] = 'adv_posts';
-            $query->set('post_type', $post_types);
+        if ($pagenow == 'edit.php' && $typenow == 'adv_posts') {
+            // 检查是否筛选头条文章
+            if (isset($_GET['headline_filter']) && $_GET['headline_filter'] == 'headline') {
+                // 只显示头条文章（分类ID=16035，状态为草稿）
+                $query->set('category', 16035);
+                $query->set('post_status', 'draft');
+            } else {
+                // 排除头条文章分类，显示其他所有文章
+                $query->set('category__not_in', array(16035));
+            }
+        }
+        return;
+    }
+    
+    // 前端显示逻辑：排除头条文章分类
+    if (!is_admin() && $query->is_main_query()) {
+        // 在所有页面类型中都允许显示 adv_posts 类型的文章，但排除头条文章
+        if ($query->is_home() || $query->is_search() || $query->is_archive() || $query->is_category()) {
+            $post_types = $query->get('post_type');
+            if (empty($post_types)) {
+                $post_types = array('post');
+            }
+            if (!is_array($post_types)) {
+                $post_types = array($post_types);
+            }
+            
+            // 添加 adv_posts 到查询的文章类型中
+            if (!in_array('adv_posts', $post_types)) {
+                $post_types[] = 'adv_posts';
+                $query->set('post_type', $post_types);
+            }
+            
+            // 排除头条文章分类（ID=16035）
+            $excluded_cats = $query->get('category__not_in');
+            if (empty($excluded_cats)) {
+                $excluded_cats = array();
+            }
+            if (!in_array(16035, $excluded_cats)) {
+                $excluded_cats[] = 16035;
+                $query->set('category__not_in', $excluded_cats);
+            }
         }
     }
 }
 
 /**
- * 5. API 提交自动化与统计 - 随机分类分配
+ * 5. API 提交自动化与统计 - 随机分类分配和头条文章处理
  */
-// API提交时自动随机分配分类
+// API提交时自动随机分配分类或处理头条文章
 add_action('rest_insert_adv_posts', function($post, $request, $creating) {
     if ($creating) {
         $random_enabled = get_option('adv_random_publish_enabled', 1);
         
-        if ($random_enabled) {
-            // 获取所有可用的分类
+        // 检查是否为头条文章（通过请求参数或标题判断）
+        $is_headline = false;
+        
+        // 方法1：通过API请求参数判断
+        if ($request->get_param('headline_article')) {
+            $is_headline = true;
+        }
+        
+        // 方法2：通过标题前缀判断（如果标题以"📋"或"头条"开头）
+        $title = $post->post_title;
+        if (strpos($title, '📋') === 0 || strpos($title, '头条') === 0) {
+            $is_headline = true;
+        }
+        
+        if ($is_headline) {
+            // 头条文章：分配到指定分类并保持草稿状态
+            wp_set_post_categories($post->ID, array(16035));
+            
+            // 确保文章状态为草稿
+            wp_update_post(array(
+                'ID' => $post->ID,
+                'post_status' => 'draft'
+            ));
+            
+            // 记录头条文章日志
+            error_log("头条文章创建: 文章ID={$post->ID}, 标题={$title}, 状态=草稿, 分类=头条文章(ID:16035)");
+            
+        } else if ($random_enabled) {
+            // 普通软文：随机分配分类
             $categories = get_categories(array(
                 'hide_empty' => 0,
-                'exclude' => array(1) // 排除"未分类"分类（通常ID为1）
+                'exclude' => array(1, 16035) // 排除"未分类"和"头条文章"分类
             ));
             
             if (!empty($categories)) {
@@ -348,23 +436,55 @@ add_action('rest_insert_adv_posts', function($post, $request, $creating) {
     }
 }, 10, 3);
 
-// 统计显示 - V2.3优化：突出显示待审核文章
+// 统计显示 - V2.4优化：添加头条文章栏目和统计信息
 add_action('restrict_manage_posts', function() {
     global $typenow;
     if ($typenow == 'adv_posts') {
         $counts = wp_count_posts('adv_posts');
+        
+        // 统计头条文章数量（分类ID=16035的草稿文章）
+        $headline_count = get_posts(array(
+            'post_type' => 'adv_posts',
+            'post_status' => 'draft',
+            'category' => 16035,
+            'posts_per_page' => -1,
+            'fields' => 'ids'
+        ));
+        $headline_total = count($headline_count);
+        
         $pending_style = $counts->pending > 0 ? 'color: #d63638; font-weight: bold;' : '';
         $publish_style = 'color: #00a32a; font-weight: bold;';
+        $headline_style = 'color: #ff6900; font-weight: bold;';
         
         echo "<div class='alignleft actions' style='line-height:32px; margin-left:10px;'>";
         echo "📊 统计：";
         echo "<span style='{$publish_style}'>已发布({$counts->publish})</span> | ";
         echo "<span style='{$pending_style}'>待审核({$counts->pending})</span> | ";
+        echo "<span style='{$headline_style}'>📋头条文章({$headline_total})</span> | ";
         echo "回收站(<b>{$counts->trash}</b>)";
         
         if ($counts->pending > 0) {
             echo " | <span style='color: #d63638;'>⚠️ 有 {$counts->pending} 篇文章待审核</span>";
         }
+        echo "</div>";
+        
+        // 添加头条文章筛选按钮
+        echo "<div class='alignleft actions' style='margin-left:10px;'>";
+        
+        // 检查当前是否在筛选头条文章
+        $current_filter = isset($_GET['headline_filter']) ? $_GET['headline_filter'] : '';
+        
+        if ($current_filter == 'headline') {
+            // 当前正在查看头条文章，显示"查看全部"按钮
+            $all_url = remove_query_arg('headline_filter');
+            echo "<a href='{$all_url}' class='button'>查看全部文章</a>";
+            echo "<span style='margin-left:10px; color:#ff6900; font-weight:bold;'>📋 当前显示：头条文章</span>";
+        } else {
+            // 显示"查看头条文章"按钮
+            $headline_url = add_query_arg('headline_filter', 'headline');
+            echo "<a href='{$headline_url}' class='button button-primary' style='background:#ff6900; border-color:#ff6900;'>📋 查看头条文章</a>";
+        }
+        
         echo "</div>";
     }
 });

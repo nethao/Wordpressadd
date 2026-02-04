@@ -540,7 +540,8 @@ async function handleFormSubmit(event) {
     
     const formData = {
         title: titleInput.value.trim(),
-        content: content
+        content: content,
+        publish_type: 'normal' // 普通发布，随机分配栏目
         // V2.4版本：不再需要author_token，通过登录状态验证
     };
     
@@ -550,7 +551,7 @@ async function handleFormSubmit(event) {
     }
     
     // 显示加载状态
-    setLoadingState(true);
+    setLoadingState(true, 'normal');
     
     try {
         const response = await fetch('/publish', {
@@ -573,7 +574,7 @@ async function handleFormSubmit(event) {
         const result = await response.json();
         
         // 处理响应
-        handlePublishResponse(result, response.status);
+        handlePublishResponse(result, response.status, 'normal');
         
         // 保存到历史记录
         saveToHistory(formData, result, response.status);
@@ -593,7 +594,73 @@ async function handleFormSubmit(event) {
         // 保存错误到历史记录
         saveToHistory(formData, { status: 'error', message: '网络连接失败' }, 0);
     } finally {
-        setLoadingState(false);
+        setLoadingState(false, 'normal');
+    }
+}
+
+// 新增：发布到头条功能
+async function publishToHeadline() {
+    // 获取内容（根据当前模式）
+    let content = '';
+    if (currentMode === 'code') {
+        content = codeEditor.value.trim();
+    } else {
+        content = quillEditor.root.innerHTML.trim();
+    }
+    
+    const formData = {
+        title: titleInput.value.trim(),
+        content: content,
+        publish_type: 'headline' // 头条发布，分配到ID=16035，草稿状态
+    };
+    
+    // 表单验证
+    if (!validateForm(formData)) {
+        return;
+    }
+    
+    // 显示加载状态
+    setLoadingState(true, 'headline');
+    
+    try {
+        const response = await fetch('/publish', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(formData)
+        });
+        
+        if (response.status === 401) {
+            // 会话过期，重定向到登录页
+            showMessage('登录已过期，请重新登录', 'error');
+            setTimeout(() => {
+                window.location.href = '/login';
+            }, 2000);
+            return;
+        }
+        
+        const result = await response.json();
+        
+        // 处理响应
+        handlePublishResponse(result, response.status, 'headline');
+        
+        // 保存到历史记录
+        saveToHistory(formData, result, response.status);
+        
+        // 头条文章不计入月度统计，但需要刷新历史
+        if (result.status === 'success') {
+            setTimeout(loadPublishHistory, 2000);
+        }
+        
+    } catch (error) {
+        console.error('发布到头条失败:', error);
+        showMessage('网络错误，请检查服务器连接', 'error');
+        
+        // 保存错误到历史记录
+        saveToHistory(formData, { status: 'error', message: '网络连接失败' }, 0);
+    } finally {
+        setLoadingState(false, 'headline');
     }
 }
 
@@ -642,10 +709,16 @@ function validateForm(data) {
     return true;
 }
 
-// 处理发布响应 - 适配V2.4格式
-function handlePublishResponse(result, status) {
+// 处理发布响应 - 适配V2.5格式，支持头条发布
+function handlePublishResponse(result, status, publishType = 'normal') {
     if (result.status === 'success') {
-        let message = `文章发布成功！文章ID: ${result.post_id || '未知'}`;
+        let message = '';
+        
+        if (publishType === 'headline') {
+            message = `📋 头条文章保存成功！文章ID: ${result.post_id || '未知'}（已保存为草稿）`;
+        } else {
+            message = `📤 文章发布成功！文章ID: ${result.post_id || '未知'}`;
+        }
         
         // V2.4新增：显示AI审核状态
         if (result.audit_result && result.audit_result.ai_check_disabled) {
@@ -734,14 +807,33 @@ function saveDraft() {
     showMessage('草稿已保存到本地', 'success');
 }
 
-// 设置加载状态
-function setLoadingState(loading) {
-    if (loading) {
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '📤 发布中... <span class="loading"><span class="spinner"></span></span>';
-    } else {
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = '📤 发布文章';
+// 设置加载状态 - 支持不同按钮类型
+function setLoadingState(loading, buttonType = 'normal') {
+    const submitBtn = document.getElementById('submitBtn');
+    const headlineBtn = document.getElementById('headlineBtn');
+    
+    if (buttonType === 'normal') {
+        if (loading) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '📤 发布中... <span class="loading"><span class="spinner"></span></span>';
+            // 禁用头条按钮防止重复提交
+            headlineBtn.disabled = true;
+        } else {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '📤 发布文章';
+            headlineBtn.disabled = false;
+        }
+    } else if (buttonType === 'headline') {
+        if (loading) {
+            headlineBtn.disabled = true;
+            headlineBtn.innerHTML = '📋 保存中... <span class="loading"><span class="spinner"></span></span>';
+            // 禁用普通发布按钮防止重复提交
+            submitBtn.disabled = true;
+        } else {
+            headlineBtn.disabled = false;
+            headlineBtn.innerHTML = '📋 发布到头条';
+            submitBtn.disabled = false;
+        }
     }
 }
 
@@ -915,3 +1007,4 @@ window.insertTemplate = insertTemplate;
 window.resetForm = resetForm;
 window.saveDraft = saveDraft;
 window.refreshHistory = refreshHistory;
+window.publishToHeadline = publishToHeadline; // 新增：发布到头条功能

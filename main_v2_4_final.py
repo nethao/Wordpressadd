@@ -85,6 +85,7 @@ class UserRole:
 class PublishRequest(BaseModel):
     title: str = Field(..., description="文章标题")
     content: str = Field(..., description="文章内容（支持HTML）")
+    publish_type: str = Field(default="normal", description="发布类型：normal（普通发布）或 headline（头条发布）")
 
 class LoginRequest(BaseModel):
     username: str = Field(..., description="用户名")
@@ -363,16 +364,28 @@ class WordPressClient:
         # 正常模式：这里可以添加真实的WordPress API调用
         return 0
     
-    async def create_post(self, title: str, content: str) -> Dict[str, Any]:
-        """创建WordPress文章 - V2.4.1版本（修复真实API调用）"""
+    async def create_post(self, title: str, content: str, publish_type: str = "normal") -> Dict[str, Any]:
+        """创建WordPress文章 - V2.5版本（支持头条发布）"""
         # 测试模式：模拟发布结果
         if self.test_mode:
             print("🧪 测试模式：模拟WordPress文章发布")
+            
+            # 根据发布类型设置不同的状态和分类
+            if publish_type == "headline":
+                status = "draft"
+                categories = [16035]  # 头条文章分类ID
+                print(f"📋 模拟头条文章发布: {title}")
+            else:
+                status = "pending"
+                categories = [1]  # 默认分类，实际会被插件随机分配
+                print(f"📤 模拟普通文章发布: {title}")
+            
             return {
                 "id": int(time.time()),  # 使用时间戳作为ID
                 "title": {"rendered": title},
                 "content": {"rendered": content},
-                "status": "pending",
+                "status": status,
+                "categories": categories,
                 "date": datetime.now().isoformat(),
                 "link": f"https://test-domain.com/posts/{int(time.time())}"
             }
@@ -383,17 +396,30 @@ class WordPressClient:
             primary_url = f"{self.api_base}/adv_posts"
             fallback_url = f"{self.api_base}/posts"
             
-            # 准备文章数据
-            post_data = {
-                "title": title,
-                "content": content,
-                "status": "pending"  # 设为待审核状态，避免直接发布
-            }
+            # 根据发布类型准备不同的文章数据
+            if publish_type == "headline":
+                # 头条文章：分配到指定分类，保存为草稿
+                post_data = {
+                    "title": title,
+                    "content": content,
+                    "status": "draft",  # 头条文章保存为草稿
+                    "categories": [16035],  # 头条文章分类ID
+                    "headline_article": True  # 标记为头条文章
+                }
+                print(f"📋 准备发布头条文章: {title}")
+            else:
+                # 普通文章：随机分配分类，待审核状态
+                post_data = {
+                    "title": title,
+                    "content": content,
+                    "status": "pending"  # 设为待审核状态，避免直接发布
+                }
+                print(f"📤 准备发布普通文章: {title}")
             
             headers = {
                 "Authorization": self.auth_header,
                 "Content-Type": "application/json",
-                "User-Agent": "WordPress-Publisher-V2.4.1"
+                "User-Agent": "WordPress-Publisher-V2.5"
             }
             
             print(f"📡 尝试发布到WordPress: {title}")
@@ -418,7 +444,7 @@ class WordPressClient:
                 connector=connector,
                 timeout=timeout,
                 headers={
-                    'User-Agent': 'WordPress-Publisher-V2.4/aiohttp',
+                    'User-Agent': 'WordPress-Publisher-V2.5/aiohttp',
                     'Accept': 'application/json',
                     'Accept-Encoding': 'gzip, deflate'
                 }
@@ -441,6 +467,13 @@ class WordPressClient:
                             print(f"✅ 文章发布成功 - ID: {result.get('id')}")
                             print(f"🔗 文章链接: {result.get('link', 'N/A')}")
                             print(f"📝 文章状态: {result.get('status', 'N/A')}")
+                            
+                            # 根据发布类型输出不同的成功信息
+                            if publish_type == "headline":
+                                print(f"📋 头条文章已保存为草稿，分类ID: 16035")
+                            else:
+                                print(f"📤 普通文章已提交审核，将随机分配栏目")
+                            
                             return result
                         elif response.status == 401:
                             # 认证失败
@@ -665,15 +698,16 @@ async def get_publish_history(current_user: Dict[str, Any] = Depends(require_log
 @app.post("/publish", response_model=PublishResponse)
 async def publish_article(request: PublishRequest, current_user: Dict[str, Any] = Depends(require_login)):
     """
-    发布文章接口 - V2.4版本
+    发布文章接口 - V2.5版本
     1. 验证用户登录状态
     2. 百度AI内容审核（可选）
-    3. 发布到WordPress（自动分类）
+    3. 发布到WordPress（支持普通发布和头条发布）
     """
     
     try:
         # 1. 用户已通过依赖注入验证登录状态
-        print(f"📝 用户 {current_user['username']} ({current_user['role']}) 正在发布文章: {request.title}")
+        publish_type_text = "头条文章" if request.publish_type == "headline" else "普通文章"
+        print(f"📝 用户 {current_user['username']} ({current_user['role']}) 正在发布{publish_type_text}: {request.title}")
         
         # 2. 验证外包身份（保持向后兼容）
         if not verify_client_auth():
@@ -682,7 +716,7 @@ async def publish_article(request: PublishRequest, current_user: Dict[str, Any] 
                 message="身份验证失败：系统配置错误"
             )
         
-        # 3. 百度AI内容审核（V2.4：支持开关控制）
+        # 3. 百度AI内容审核（V2.5：头条文章也需要审核）
         ai_check_enabled = os.getenv("ENABLE_AI_CHECK", "true").lower() == "true"
         
         if ai_check_enabled:
@@ -721,10 +755,10 @@ async def publish_article(request: PublishRequest, current_user: Dict[str, Any] 
             }
             print("⚠️ AI审核已禁用，内容将直接发布到WordPress")
         
-        # 4. 审核通过或跳过，发布到WordPress
-        wp_result = await wp_client.create_post(request.title, request.content)
+        # 4. 审核通过或跳过，发布到WordPress（传递发布类型）
+        wp_result = await wp_client.create_post(request.title, request.content, request.publish_type)
         
-        # V2.4.1新增：检查WordPress API调用是否成功
+        # V2.5新增：检查WordPress API调用是否成功
         if wp_result.get("error"):
             # WordPress API调用失败
             return PublishResponse(
@@ -733,8 +767,12 @@ async def publish_article(request: PublishRequest, current_user: Dict[str, Any] 
                 audit_result=audit_result
             )
         
-        # 发布成功
-        success_message = "文章发布成功"
+        # 发布成功 - 根据发布类型返回不同的消息
+        if request.publish_type == "headline":
+            success_message = "头条文章保存成功"
+        else:
+            success_message = "文章发布成功"
+            
         if not ai_check_enabled:
             success_message += "（AI审核已禁用）"
         
@@ -745,7 +783,10 @@ async def publish_article(request: PublishRequest, current_user: Dict[str, Any] 
         elif wp_status == "publish":
             success_message += "，已直接发布"
         elif wp_status == "draft":
-            success_message += "，已保存为草稿"
+            if request.publish_type == "headline":
+                success_message += "，已保存为草稿"
+            else:
+                success_message += "，已保存为草稿"
         
         return PublishResponse(
             status="success",

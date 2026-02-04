@@ -1,8 +1,8 @@
 <?php
 /*
-Plugin Name: 软文广告高级管理系统 (V2.3 审核增强版)
-Description: 包含动态栏目指定、精准前端隐藏、状态管理、定时删除、API强制开启及审核通过功能。
-Version: 2.3
+Plugin Name: 软文广告高级管理系统 (V2.4 随机发布版)
+Description: 支持全站点随机栏目发布、状态管理、定时删除、API强制开启及审核通过功能。软文将随机分布到各个栏目中，提高内容分布的自然性。
+Version: 2.4
 Author: Gemini Thought Partner
 */
 
@@ -73,17 +73,19 @@ function adv_mgr_add_rewrite_rules() {
 add_action('admin_menu', 'adv_mgr_add_setting_page');
 function adv_mgr_add_setting_page() {
     add_submenu_page('edit.php?post_type=adv_posts', '栏目设置', '栏目设置', 'manage_options', 'adv_settings', 'adv_mgr_render_settings');
+    // 添加随机重分配工具页面
+    add_submenu_page('edit.php?post_type=adv_posts', '随机重分配', '随机重分配', 'manage_options', 'adv_redistribute', 'adv_mgr_redistribute_page');
 }
 
 function adv_mgr_render_settings() {
     if (isset($_POST['adv_mgr_save'])) {
         update_option('adv_delete_days', intval($_POST['adv_delete_days']));
-        update_option('adv_target_category', intval($_POST['adv_target_category']));
+        update_option('adv_random_publish_enabled', isset($_POST['adv_random_publish_enabled']) ? 1 : 0);
         echo '<div class="updated"><p>设置已成功保存！</p></div>';
     }
     
     $days = get_option('adv_delete_days', 45);
-    $target_cat = get_option('adv_target_category', 0);
+    $random_enabled = get_option('adv_random_publish_enabled', 1); // 默认开启随机发布
     $categories = get_categories(array('hide_empty' => 0));
     ?>
     <div class="wrap">
@@ -91,22 +93,26 @@ function adv_mgr_render_settings() {
         <form method="post">
             <table class="form-table">
                 <tr>
-                    <th scope="row">指定发布栏目</th>
+                    <th scope="row">随机发布模式</th>
                     <td>
-                        <select name="adv_target_category">
-                            <option value="0">-- 请选择一个分类 --</option>
-                            <?php foreach ($categories as $cat): ?>
-                                <option value="<?php echo $cat->term_id; ?>" <?php selected($target_cat, $cat->term_id); ?>>
-                                    <?php echo $cat->name; ?> (ID: <?php echo $cat->term_id; ?>)
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                        <?php 
-                        if ($target_cat > 0) {
-                            $cat_link = get_category_link($target_cat);
-                            echo '<p class="description"><b>当前动态访问地址：</b><a href="' . esc_url($cat_link) . '" target="_blank">' . esc_url($cat_link) . '</a></p>';
-                        }
-                        ?>
+                        <label>
+                            <input type="checkbox" name="adv_random_publish_enabled" value="1" <?php checked($random_enabled, 1); ?> />
+                            启用全站点随机栏目发布
+                        </label>
+                        <p class="description">
+                            <strong>✅ 已启用随机发布模式</strong><br>
+                            • 每篇软文将随机分配到网站的任意栏目<br>
+                            • 覆盖全站点所有分类，提高内容分布的自然性<br>
+                            • 可用栏目总数：<strong><?php echo count($categories); ?></strong> 个<br>
+                            • 栏目列表：<?php 
+                            $cat_names = array();
+                            foreach ($categories as $cat) {
+                                $cat_names[] = $cat->name;
+                            }
+                            echo implode('、', array_slice($cat_names, 0, 10));
+                            if (count($cat_names) > 10) echo '...等';
+                            ?>
+                        </p>
                     </td>
                 </tr>
                 <tr>
@@ -119,48 +125,226 @@ function adv_mgr_render_settings() {
             <input type="hidden" name="adv_mgr_save" value="1">
             <?php submit_button(); ?>
         </form>
+        
+        <!-- 随机发布统计信息 -->
+        <div class="card" style="margin-top: 20px; padding: 15px;">
+            <h3>📊 随机发布统计</h3>
+            <?php
+            // 统计各分类下的软文数量
+            $category_stats = array();
+            foreach ($categories as $cat) {
+                $count = get_posts(array(
+                    'post_type' => 'adv_posts',
+                    'post_status' => 'publish',
+                    'category' => $cat->term_id,
+                    'posts_per_page' => -1,
+                    'fields' => 'ids'
+                ));
+                if (!empty($count)) {
+                    $category_stats[$cat->name] = count($count);
+                }
+            }
+            
+            if (!empty($category_stats)) {
+                echo '<p><strong>当前各栏目软文分布：</strong></p>';
+                echo '<ul>';
+                foreach ($category_stats as $cat_name => $count) {
+                    echo "<li>{$cat_name}：{$count} 篇</li>";
+                }
+                echo '</ul>';
+            } else {
+                echo '<p>暂无已发布的软文数据</p>';
+            }
+            ?>
+        </div>
     </div>
     <?php
 }
 
 /**
- * 4. 优化后的前端隐藏逻辑
- * 首页/搜索/小工具排除，但【分类详情页】必须显示内容
+ * 随机重分配工具页面
  */
-add_action('pre_get_posts', 'adv_mgr_exclude_logic');
-function adv_mgr_exclude_logic($query) {
-    // 1. 后台不拦截，非主查询不拦截（确保不干扰其他功能）
-    if (is_admin() || !$query->is_main_query()) return;
-
-    $target_cat = get_option('adv_target_category', 0);
-    if ($target_cat <= 0) return;
-
-    // 2. 只有在【不是】访问该分类页面时，才执行排除逻辑
-    if ( ! $query->is_category($target_cat) ) {
+function adv_mgr_redistribute_page() {
+    // 处理重分配请求
+    if (isset($_POST['redistribute_all'])) {
+        $redistributed_count = adv_mgr_redistribute_all_posts();
+        echo '<div class="updated"><p>✅ 重分配完成！共处理了 ' . $redistributed_count . ' 篇文章。</p></div>';
+    }
+    
+    // 获取当前软文统计
+    $published_posts = get_posts(array(
+        'post_type' => 'adv_posts',
+        'post_status' => 'publish',
+        'posts_per_page' => -1,
+        'fields' => 'ids'
+    ));
+    
+    $categories = get_categories(array('hide_empty' => 0));
+    
+    ?>
+    <div class="wrap">
+        <h1>🎲 随机重分配工具</h1>
         
-        // 如果是首页、搜索页或其他存档页
-        if ($query->is_home() || $query->is_search() || $query->is_archive()) {
+        <div class="card" style="margin-top: 20px; padding: 20px;">
+            <h3>📊 当前状态</h3>
+            <p><strong>已发布软文总数：</strong><?php echo count($published_posts); ?> 篇</p>
+            <p><strong>可用栏目总数：</strong><?php echo count($categories); ?> 个</p>
             
-            // 排除掉该分类下的所有文章
-            $query->set('category__not_in', array($target_cat));
+            <?php if (!empty($published_posts)): ?>
+            <form method="post" onsubmit="return confirm('确定要重新随机分配所有已发布软文的栏目吗？此操作不可撤销。');">
+                <p class="description">
+                    <strong>⚠️ 重要说明：</strong><br>
+                    • 此操作将重新随机分配所有已发布软文的栏目<br>
+                    • 每篇文章将被随机分配到任意一个栏目中<br>
+                    • 操作不可撤销，请谨慎使用<br>
+                    • 建议在非高峰时段执行此操作
+                </p>
+                
+                <input type="hidden" name="redistribute_all" value="1">
+                <button type="submit" class="button button-primary button-large" style="margin-top: 15px;">
+                    🎲 开始随机重分配所有软文
+                </button>
+            </form>
+            <?php else: ?>
+            <p style="color: #666;">暂无已发布的软文需要重分配。</p>
+            <?php endif; ?>
+        </div>
+        
+        <!-- 分类分布预览 -->
+        <div class="card" style="margin-top: 20px; padding: 20px;">
+            <h3>📈 当前栏目分布</h3>
+            <?php
+            $category_distribution = array();
+            foreach ($categories as $cat) {
+                $count = get_posts(array(
+                    'post_type' => 'adv_posts',
+                    'post_status' => 'publish',
+                    'category' => $cat->term_id,
+                    'posts_per_page' => -1,
+                    'fields' => 'ids'
+                ));
+                $category_distribution[$cat->name] = count($count);
+            }
             
-            // 关键：强制主循环只展示原生文章 'post'，从而在小工具里彻底隐藏 'adv_posts'
-            $query->set('post_type', array('post'));
+            if (array_sum($category_distribution) > 0) {
+                echo '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 15px;">';
+                foreach ($category_distribution as $cat_name => $count) {
+                    $percentage = count($published_posts) > 0 ? round(($count / count($published_posts)) * 100, 1) : 0;
+                    echo '<div style="padding: 10px; background: #f9f9f9; border-radius: 4px; text-align: center;">';
+                    echo '<strong>' . esc_html($cat_name) . '</strong><br>';
+                    echo '<span style="font-size: 18px; color: #0073aa;">' . $count . '</span> 篇<br>';
+                    echo '<small>(' . $percentage . '%)</small>';
+                    echo '</div>';
+                }
+                echo '</div>';
+            } else {
+                echo '<p style="color: #666;">暂无数据</p>';
+            }
+            ?>
+        </div>
+    </div>
+    <?php
+}
+
+/**
+ * 执行所有软文的随机重分配
+ */
+function adv_mgr_redistribute_all_posts() {
+    // 获取所有已发布的软文
+    $posts = get_posts(array(
+        'post_type' => 'adv_posts',
+        'post_status' => 'publish',
+        'posts_per_page' => -1
+    ));
+    
+    // 获取所有可用分类（排除未分类）
+    $categories = get_categories(array(
+        'hide_empty' => 0,
+        'exclude' => array(1)
+    ));
+    
+    if (empty($categories)) {
+        return 0;
+    }
+    
+    $redistributed_count = 0;
+    
+    foreach ($posts as $post) {
+        // 随机选择一个分类
+        $random_category = $categories[array_rand($categories)];
+        
+        // 更新文章分类
+        $result = wp_set_post_categories($post->ID, array($random_category->term_id));
+        
+        if ($result !== false) {
+            $redistributed_count++;
+            
+            // 记录重分配日志
+            error_log("软文随机重分配: 文章ID={$post->ID}, 标题={$post->post_title}, 重新分配到={$random_category->name}(ID:{$random_category->term_id})");
         }
-    } else {
-        // 3. 当用户主动访问该分类 URL 时，必须允许展示 'adv_posts' 类型
-        $query->set('post_type', array('post', 'adv_posts'));
+    }
+    
+    return $redistributed_count;
+}
+
+/**
+ * 4. 移除前端隐藏逻辑 - 随机发布模式下不需要隐藏特定分类
+ * 软文将随机分布在各个栏目中，与普通文章混合显示
+ */
+add_action('pre_get_posts', 'adv_mgr_random_display_logic');
+function adv_mgr_random_display_logic($query) {
+    // 后台不拦截，非主查询不拦截
+    if (is_admin() || !$query->is_main_query()) return;
+    
+    // 随机发布模式下，软文与普通文章一起正常显示
+    // 不再进行特殊的隐藏处理，让内容自然分布
+    
+    // 在所有页面类型中都允许显示 adv_posts 类型的文章
+    if ($query->is_home() || $query->is_search() || $query->is_archive() || $query->is_category()) {
+        $post_types = $query->get('post_type');
+        if (empty($post_types)) {
+            $post_types = array('post');
+        }
+        if (!is_array($post_types)) {
+            $post_types = array($post_types);
+        }
+        
+        // 添加 adv_posts 到查询的文章类型中
+        if (!in_array('adv_posts', $post_types)) {
+            $post_types[] = 'adv_posts';
+            $query->set('post_type', $post_types);
+        }
     }
 }
 
 /**
- * 5. API 提交自动化与统计
+ * 5. API 提交自动化与统计 - 随机分类分配
  */
-// API提交时自动关联所选分类
+// API提交时自动随机分配分类
 add_action('rest_insert_adv_posts', function($post, $request, $creating) {
     if ($creating) {
-        $target_cat = get_option('adv_target_category', 0);
-        if ($target_cat > 0) wp_set_post_categories($post->ID, array($target_cat));
+        $random_enabled = get_option('adv_random_publish_enabled', 1);
+        
+        if ($random_enabled) {
+            // 获取所有可用的分类
+            $categories = get_categories(array(
+                'hide_empty' => 0,
+                'exclude' => array(1) // 排除"未分类"分类（通常ID为1）
+            ));
+            
+            if (!empty($categories)) {
+                // 随机选择一个分类
+                $random_category = $categories[array_rand($categories)];
+                wp_set_post_categories($post->ID, array($random_category->term_id));
+                
+                // 记录随机分配日志
+                error_log("软文随机分类分配: 文章ID={$post->ID}, 分配到分类={$random_category->name}(ID:{$random_category->term_id})");
+            } else {
+                // 如果没有可用分类，分配到默认分类
+                wp_set_post_categories($post->ID, array(1));
+                error_log("软文分类分配: 文章ID={$post->ID}, 无可用分类，分配到默认分类");
+            }
+        }
     }
 }, 10, 3);
 

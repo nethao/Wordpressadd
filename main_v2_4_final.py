@@ -756,28 +756,36 @@ async def publish_article(request: PublishRequest, current_user: Dict[str, Any] 
             print("⚠️ AI审核已禁用，内容将直接发布到WordPress")
         
         # 4. 审核通过或跳过，发布到WordPress（传递发布类型）
+        print(f"🚀 开始发布到WordPress，类型: {request.publish_type}")
         wp_result = await wp_client.create_post(request.title, request.content, request.publish_type)
+        print(f"📊 WordPress返回结果: {wp_result}")
         
         # V2.5新增：检查WordPress API调用是否成功
         if wp_result.get("error"):
             # WordPress API调用失败
+            error_message = f"WordPress发布失败: {wp_result.get('message', '未知错误')}"
+            print(f"❌ {error_message}")
             return PublishResponse(
                 status="error",
-                message=f"WordPress发布失败: {wp_result.get('message', '未知错误')}",
+                message=error_message,
                 audit_result=audit_result
             )
         
         # 发布成功 - 根据发布类型返回不同的消息
         if request.publish_type == "headline":
             success_message = "头条文章保存成功"
+            print(f"📋 头条文章保存成功: {request.title}")
         else:
             success_message = "文章发布成功"
+            print(f"📤 普通文章发布成功: {request.title}")
             
         if not ai_check_enabled:
             success_message += "（AI审核已禁用）"
         
         # 根据WordPress返回的状态添加额外信息
         wp_status = wp_result.get("status", "unknown")
+        print(f"📝 WordPress文章状态: {wp_status}")
+        
         if wp_status == "pending":
             success_message += "，已提交待审核队列"
         elif wp_status == "publish":
@@ -787,6 +795,8 @@ async def publish_article(request: PublishRequest, current_user: Dict[str, Any] 
                 success_message += "，已保存为草稿"
             else:
                 success_message += "，已保存为草稿"
+        
+        print(f"✅ 最终成功消息: {success_message}")
         
         return PublishResponse(
             status="success",

@@ -340,8 +340,8 @@ function adv_mgr_random_display_logic($query) {
                 $query->set('category', 16035);
                 $query->set('post_status', 'draft');
             } else {
-                // 排除头条文章分类，显示其他所有文章
-                $query->set('category__not_in', array(16035));
+                // 默认显示所有文章，不进行分类排除
+                // 移除之前的排除逻辑，让管理员可以看到所有文章
             }
         }
         return;

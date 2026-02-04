@@ -1,8 +1,8 @@
 <?php
 /*
-Plugin Name: 软文广告高级管理系统 (V2.5 头条文章版)
-Description: 支持全站点随机栏目发布、头条文章草稿管理、状态管理、定时删除、API强制开启及审核通过功能。新增📋头条文章栏目，专门用于草稿保存和查看。
-Version: 2.5
+Plugin Name: 软文广告高级管理系统 (V2.6 分类管理版)
+Description: 支持全站点随机栏目发布、头条文章草稿管理、分类筛选显示、状态管理、定时删除、API强制开启及审核通过功能。新增网站文章和头条文章分类按钮。
+Version: 2.6
 Author: Gemini Thought Partner
 */
 
@@ -329,19 +329,33 @@ function adv_mgr_redistribute_all_posts() {
  */
 add_action('pre_get_posts', 'adv_mgr_random_display_logic');
 function adv_mgr_random_display_logic($query) {
-    // 后台管理页面的头条文章筛选逻辑
+    // 后台管理页面的文章筛选逻辑
     if (is_admin() && $query->is_main_query()) {
         global $pagenow, $typenow;
         
         if ($pagenow == 'edit.php' && $typenow == 'adv_posts') {
-            // 检查是否筛选头条文章
-            if (isset($_GET['headline_filter']) && $_GET['headline_filter'] == 'headline') {
+            // 检查筛选类型
+            $article_filter = isset($_GET['article_filter']) ? $_GET['article_filter'] : '';
+            
+            if ($article_filter == 'headline') {
                 // 只显示头条文章（分类ID=16035，状态为草稿）
                 $query->set('category', 16035);
                 $query->set('post_status', 'draft');
+                
+            } elseif ($article_filter == 'website') {
+                // 只显示网站文章（排除头条文章分类，显示已发布和待审核）
+                $query->set('category__not_in', array(16035));
+                $query->set('post_status', array('publish', 'pending'));
+                
             } else {
-                // 默认显示所有文章，不进行分类排除
-                // 移除之前的排除逻辑，让管理员可以看到所有文章
+                // 显示全部文章（默认行为，不进行特殊筛选）
+                // 保持WordPress默认的查询逻辑
+            }
+            
+            // 兼容旧的headline_filter参数（向后兼容）
+            if (isset($_GET['headline_filter']) && $_GET['headline_filter'] == 'headline') {
+                $query->set('category', 16035);
+                $query->set('post_status', 'draft');
             }
         }
         return;
@@ -448,7 +462,7 @@ add_action('rest_insert_adv_posts', function($post, $request, $creating) {
     }
 }, 10, 3);
 
-// 统计显示 - V2.4优化：添加头条文章栏目和统计信息
+// 统计显示 - V2.5优化：添加网站文章和头条文章分类按钮
 add_action('restrict_manage_posts', function() {
     global $typenow;
     if ($typenow == 'adv_posts') {
@@ -464,15 +478,27 @@ add_action('restrict_manage_posts', function() {
         ));
         $headline_total = count($headline_count);
         
+        // 统计网站文章数量（排除头条文章分类的所有文章）
+        $website_count = get_posts(array(
+            'post_type' => 'adv_posts',
+            'post_status' => array('publish', 'pending'),
+            'category__not_in' => array(16035),
+            'posts_per_page' => -1,
+            'fields' => 'ids'
+        ));
+        $website_total = count($website_count);
+        
         $pending_style = $counts->pending > 0 ? 'color: #d63638; font-weight: bold;' : '';
         $publish_style = 'color: #00a32a; font-weight: bold;';
         $headline_style = 'color: #ff6900; font-weight: bold;';
+        $website_style = 'color: #0073aa; font-weight: bold;';
         
         echo "<div class='alignleft actions' style='line-height:32px; margin-left:10px;'>";
         echo "📊 统计：";
         echo "<span style='{$publish_style}'>已发布({$counts->publish})</span> | ";
         echo "<span style='{$pending_style}'>待审核({$counts->pending})</span> | ";
-        echo "<span style='{$headline_style}'>📋头条文章({$headline_total})</span> | ";
+        echo "<span style='{$website_style}'>网站文章({$website_total})</span> | ";
+        echo "<span style='{$headline_style}'>头条文章({$headline_total})</span> | ";
         echo "回收站(<b>{$counts->trash}</b>)";
         
         if ($counts->pending > 0) {
@@ -480,21 +506,36 @@ add_action('restrict_manage_posts', function() {
         }
         echo "</div>";
         
-        // 添加头条文章筛选按钮
-        echo "<div class='alignleft actions' style='margin-left:10px;'>";
+        // 添加分类筛选按钮
+        echo "<div class='alignleft actions' style='margin-left:10px; margin-top:10px;'>";
         
-        // 检查当前是否在筛选头条文章
-        $current_filter = isset($_GET['headline_filter']) ? $_GET['headline_filter'] : '';
+        // 检查当前筛选状态
+        $current_filter = isset($_GET['article_filter']) ? $_GET['article_filter'] : '';
         
-        if ($current_filter == 'headline') {
-            // 当前正在查看头条文章，显示"查看全部"按钮
-            $all_url = remove_query_arg('headline_filter');
-            echo "<a href='{$all_url}' class='button'>查看全部文章</a>";
-            echo "<span style='margin-left:10px; color:#ff6900; font-weight:bold;'>📋 当前显示：头条文章</span>";
+        // 全部文章按钮
+        $all_class = ($current_filter == '') ? 'button-primary' : 'button-secondary';
+        $all_url = remove_query_arg(array('article_filter', 'headline_filter'));
+        echo "<a href='{$all_url}' class='button {$all_class}' style='margin-right:5px;'>📋 全部文章</a>";
+        
+        // 网站文章按钮
+        $website_class = ($current_filter == 'website') ? 'button-primary' : 'button-secondary';
+        $website_url = add_query_arg('article_filter', 'website');
+        $website_url = remove_query_arg('headline_filter', $website_url);
+        echo "<a href='{$website_url}' class='button {$website_class}' style='margin-right:5px; background-color:" . ($current_filter == 'website' ? '#0073aa' : '') . "; border-color:" . ($current_filter == 'website' ? '#0073aa' : '') . ";'>🌐 网站文章</a>";
+        
+        // 头条文章按钮
+        $headline_class = ($current_filter == 'headline') ? 'button-primary' : 'button-secondary';
+        $headline_url = add_query_arg('article_filter', 'headline');
+        $headline_url = remove_query_arg('headline_filter', $headline_url);
+        echo "<a href='{$headline_url}' class='button {$headline_class}' style='background-color:" . ($current_filter == 'headline' ? '#ff6900' : '') . "; border-color:" . ($current_filter == 'headline' ? '#ff6900' : '') . ";'>📋 头条文章</a>";
+        
+        // 显示当前筛选状态
+        if ($current_filter == 'website') {
+            echo "<span style='margin-left:15px; color:#0073aa; font-weight:bold;'>🌐 当前显示：网站文章 ({$website_total}篇)</span>";
+        } elseif ($current_filter == 'headline') {
+            echo "<span style='margin-left:15px; color:#ff6900; font-weight:bold;'>📋 当前显示：头条文章 ({$headline_total}篇)</span>";
         } else {
-            // 显示"查看头条文章"按钮
-            $headline_url = add_query_arg('headline_filter', 'headline');
-            echo "<a href='{$headline_url}' class='button button-primary' style='background:#ff6900; border-color:#ff6900;'>📋 查看头条文章</a>";
+            echo "<span style='margin-left:15px; color:#666; font-weight:bold;'>📋 当前显示：全部文章</span>";
         }
         
         echo "</div>";

@@ -344,8 +344,22 @@ function adv_mgr_random_display_logic($query) {
                 
             } elseif ($article_filter == 'website') {
                 // 只显示网站文章（排除头条文章分类，显示已发布和待审核）
-                $query->set('category__not_in', array(16035));
+                // 使用meta_query来更精确地排除头条文章
                 $query->set('post_status', array('publish', 'pending'));
+                
+                // 添加自定义的WHERE子句来排除头条文章分类
+                add_filter('posts_where', function($where) {
+                    global $wpdb;
+                    // 排除分类ID为16035的文章
+                    $where .= " AND {$wpdb->posts}.ID NOT IN (
+                        SELECT object_id FROM {$wpdb->term_relationships} 
+                        WHERE term_taxonomy_id IN (
+                            SELECT term_taxonomy_id FROM {$wpdb->term_taxonomy} 
+                            WHERE term_id = 16035 AND taxonomy = 'category'
+                        )
+                    )";
+                    return $where;
+                }, 10, 1);
                 
             } else {
                 // 显示全部文章（默认行为，不进行特殊筛选）
@@ -543,7 +557,118 @@ add_action('restrict_manage_posts', function() {
 });
 
 /**
- * 6. 定时清理任务和数据库表创建
+ * 8. 头条文章标题标识 - 在管理列表中为头条文章添加红色醒目标识
+ */
+add_filter('the_title', 'adv_mgr_add_headline_badge', 10, 2);
+function adv_mgr_add_headline_badge($title, $post_id) {
+    // 只在后台管理页面显示
+    if (!is_admin()) {
+        return $title;
+    }
+    
+    // 只处理软文类型
+    $post = get_post($post_id);
+    if (!$post || $post->post_type !== 'adv_posts') {
+        return $title;
+    }
+    
+    // 检查是否为头条文章（分类ID=16035且状态为草稿）
+    $categories = wp_get_post_categories($post_id);
+    $is_headline = in_array(16035, $categories) && $post->post_status === 'draft';
+    
+    if ($is_headline) {
+        // 添加红色醒目的头条文章标识
+        $badge = '<span style="display: inline-block; background: linear-gradient(135deg, #ff4444, #cc0000); color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; margin-right: 8px; box-shadow: 0 2px 4px rgba(255,68,68,0.3); vertical-align: middle;">📰 头条文章</span>';
+        $title = $badge . $title;
+    }
+    
+    return $title;
+}
+
+/**
+ * 9. 头条文章行样式 - 为头条文章添加特殊的行背景色
+ */
+add_filter('post_row_actions', 'adv_mgr_add_headline_row_style', 10, 2);
+function adv_mgr_add_headline_row_style($actions, $post) {
+    // 只处理软文类型的头条文章
+    if ($post->post_type === 'adv_posts') {
+        $categories = wp_get_post_categories($post->ID);
+        $is_headline = in_array(16035, $categories) && $post->post_status === 'draft';
+        
+        if ($is_headline) {
+            // 添加JavaScript来设置行背景色
+            echo '<script>
+                document.addEventListener("DOMContentLoaded", function() {
+                    var row = document.querySelector("tr#post-' . $post->ID . '");
+                    if (row) {
+                        row.style.backgroundColor = "#fff5f5";
+                        row.style.borderLeft = "4px solid #ff4444";
+                        row.style.boxShadow = "0 1px 3px rgba(255,68,68,0.1)";
+                    }
+                });
+            </script>';
+        }
+    }
+    
+    return $actions;
+}
+
+/**
+ * 10. 头条文章CSS样式 - 添加自定义样式
+ */
+add_action('admin_head', 'adv_mgr_headline_admin_styles');
+function adv_mgr_headline_admin_styles() {
+    global $pagenow, $typenow;
+    
+    // 只在软文管理页面加载样式
+    if ($pagenow === 'edit.php' && $typenow === 'adv_posts') {
+        echo '<style>
+            /* 头条文章标识样式 */
+            .headline-badge {
+                display: inline-block;
+                background: linear-gradient(135deg, #ff4444, #cc0000);
+                color: white;
+                padding: 3px 10px;
+                border-radius: 15px;
+                font-size: 11px;
+                font-weight: bold;
+                margin-right: 10px;
+                box-shadow: 0 2px 6px rgba(255,68,68,0.4);
+                vertical-align: middle;
+                animation: pulse 2s infinite;
+            }
+            
+            /* 头条文章行样式 */
+            .wp-list-table tbody tr.headline-article {
+                background-color: #fff5f5 !important;
+                border-left: 4px solid #ff4444 !important;
+                box-shadow: 0 1px 3px rgba(255,68,68,0.1) !important;
+            }
+            
+            /* 头条文章悬停效果 */
+            .wp-list-table tbody tr.headline-article:hover {
+                background-color: #ffebeb !important;
+                box-shadow: 0 2px 8px rgba(255,68,68,0.2) !important;
+            }
+            
+            /* 脉冲动画效果 */
+            @keyframes pulse {
+                0% { box-shadow: 0 2px 6px rgba(255,68,68,0.4); }
+                50% { box-shadow: 0 2px 12px rgba(255,68,68,0.6); }
+                100% { box-shadow: 0 2px 6px rgba(255,68,68,0.4); }
+            }
+            
+            /* 头条文章状态标识 */
+            .post-state-headline {
+                color: #ff4444;
+                font-weight: bold;
+            }
+        </style>';
+    }
+}
+
+/**
+ * 11. 定时清理任务和数据库表创建
  */
 register_activation_hook(__FILE__, function() {
     // 1. 创建定时清理任务
@@ -604,7 +729,7 @@ add_filter('rest_pre_dispatch', function($result, $server, $request) {
 }, 10, 3);
 
 /**
- * 7. 审核通过功能 - V2.3新增
+ * 12. 审核通过功能 - V2.3新增
  * 包含单篇审核通过快捷键和批量审核通过功能
  */
 
@@ -794,7 +919,7 @@ function adv_mgr_show_approve_notices() {
 }
 
 /**
- * 11. 注册发稿统计子菜单
+ * 13. 注册发稿统计子菜单
  */
 add_action('admin_menu', function() {
     add_submenu_page(
@@ -808,7 +933,7 @@ add_action('admin_menu', function() {
 });
 
 /**
- * 12. 统计页面显示逻辑 - 基于永久日志表
+ * 14. 统计页面显示逻辑 - 基于永久日志表
  */
 function adv_mgr_stats_page() {
     // 获取日期筛选参数（默认本月）
